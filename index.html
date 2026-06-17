@@ -1,17 +1,62 @@
 <!DOCTYPE html>
 <html>
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
-<head
+<head>
   <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI动态数学课件</title>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
   <style>
-    body { margin:0; font-family: Arial, sans-serif; background:#f5f7fb; }
-    .page { max-width:430px; margin:auto; background:white; min-height:100vh; padding:16px; }
-    .title { font-size:22px; font-weight:bold; margin-bottom:12px; }
-    .card { background:#f7f9ff; border-radius:16px; padding:14px; margin-bottom:14px; }
-    .ai { line-height:1.7; font-size:15px; color:#333; }
-    button { width:100%; height:46px; border:0; border-radius:12px; background:#2f66ff; color:white; font-size:16px; }
-    input[type="range"] { width:70%; }
+    body {
+      margin:0;
+      font-family: Arial, sans-serif;
+      background:#f5f7fb;
+    }
+
+    .page {
+      width:100%;
+      max-width:430px;
+      margin:0 auto;
+      background:white;
+      min-height:100vh;
+      padding:12px;
+      box-sizing:border-box;
+    }
+
+    .title {
+      font-size:22px;
+      font-weight:bold;
+      margin-bottom:12px;
+    }
+
+    .card {
+      background:#f7f9ff;
+      border-radius:16px;
+      padding:12px;
+      margin-bottom:14px;
+      box-sizing:border-box;
+    }
+
+    .ai {
+      line-height:1.7;
+      font-size:15px;
+      color:#333;
+    }
+
+    button {
+      width:100%;
+      height:46px;
+      border:0;
+      border-radius:12px;
+      background:#2f66ff;
+      color:white;
+      font-size:16px;
+    }
+
+    input[type="range"] {
+      width:72%;
+    }
+
     .input-box {
       width:100%;
       height:42px;
@@ -22,6 +67,37 @@
       font-size:15px;
       box-sizing:border-box;
     }
+
+    svg {
+      width:100%;
+      height:240px;
+      background:white;
+      border-radius:12px;
+      display:block;
+    }
+
+    @media (max-width:480px) {
+      .page {
+        max-width:none;
+        padding:10px;
+      }
+
+      .title {
+        font-size:20px;
+      }
+
+      .card {
+        padding:10px;
+      }
+
+      svg {
+        height:220px;
+      }
+
+      .ai {
+        font-size:14px;
+      }
+    }
   </style>
 </head>
 
@@ -30,7 +106,7 @@
     <div class="title">扇形面积动态模型</div>
 
     <div class="card">
-      <svg viewBox="0 0 300 240" style="width:100%;height:260px;background:white;border-radius:12px;">
+      <svg viewBox="0 0 300 240">
         <circle cx="150" cy="120" r="80" fill="none" stroke="#ddd" stroke-width="2"/>
         <path id="sector" fill="rgba(47,102,255,0.18)" stroke="#2f66ff" stroke-width="3"/>
         <text x="142" y="125" font-size="14">O</text>
@@ -66,7 +142,7 @@
       <div id="checkResult" style="margin-top:12px;"></div>
     </div>
 
-    <div class="card ai">
+    <div class="card ai" style="margin-top:14px;">
       <b>问问AI：</b><br>
       <input id="aiQuestion" class="input-box" placeholder="例如：为什么半径变大面积变化更明显？">
 
@@ -131,11 +207,8 @@
     }
 
     function showPractice() {
-      const questionR = Math.floor(Math.random() * 50) + 30;
-      const questionAngle = Math.floor(Math.random() * 160) + 40;
-
-      practiceR = questionR;
-      practiceAngle = questionAngle;
+      practiceR = Math.floor(Math.random() * 50) + 30;
+      practiceAngle = Math.floor(Math.random() * 160) + 40;
       practiceAnswer = (practiceAngle / 360) * Math.PI * practiceR * practiceR;
 
       document.getElementById('practiceBox').style.display = 'block';
@@ -151,10 +224,11 @@
     }
 
     function checkAnswer() {
-      const userAnswer = Number(document.getElementById('answerInput').value);
+      const input = document.getElementById('answerInput').value;
+      const userAnswer = Number(input);
       const correctAnswer = Number(practiceAnswer.toFixed(1));
 
-      if (!document.getElementById('answerInput').value) {
+      if (!input) {
         document.getElementById('checkResult').innerHTML = '请输入答案。';
         return;
       }
@@ -169,45 +243,45 @@
       }
     }
 
-   async function askAI() {
-  const question = document.getElementById('aiQuestion').value;
+    async function askAI() {
+      const question = document.getElementById('aiQuestion').value;
 
-  if (!question) {
-    document.getElementById('aiAnswer').innerHTML = '请输入你想问的问题。';
-    return;
-  }
+      if (!question) {
+        document.getElementById('aiAnswer').innerHTML = '请输入你想问的问题。';
+        return;
+      }
 
-  document.getElementById('aiAnswer').innerHTML = '🤖 AI正在思考...';
+      document.getElementById('aiAnswer').innerHTML = '🤖 AI正在思考...';
 
-  try {
-    const response = await fetch('/api/ask', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        question: question,
-        r: currentR,
-        angle: currentAngle,
-        area: currentArea.toFixed(1)
-      })
-    });
+      try {
+        const response = await fetch('/api/ask', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            question: question,
+            r: currentR,
+            angle: currentAngle,
+            area: currentArea.toFixed(1)
+          })
+        });
 
-    const data = await response.json();
+        const data = await response.json();
 
-    if (data.answer) {
-      document.getElementById('aiAnswer').innerHTML =
-  `🤖 AI回答：<br><br>${marked.parse(data.answer)}`;
-    } else {
-      document.getElementById('aiAnswer').innerHTML =
-        `❌ AI请求失败：${data.error}`;
+        if (data.answer) {
+          document.getElementById('aiAnswer').innerHTML =
+            `🤖 AI回答：<br><br>${marked.parse(data.answer)}`;
+        } else {
+          document.getElementById('aiAnswer').innerHTML =
+            `❌ AI请求失败：${data.error}`;
+        }
+
+      } catch (error) {
+        document.getElementById('aiAnswer').innerHTML =
+          '❌ AI连接失败，请检查服务是否正在运行。';
+      }
     }
-
-  } catch (error) {
-    document.getElementById('aiAnswer').innerHTML =
-      '❌ AI连接失败，请检查 server.js 是否正在运行。';
-  }
-}
 
     draw();
   </script>

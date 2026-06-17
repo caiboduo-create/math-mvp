@@ -12,7 +12,7 @@ const app = express();
 
 const client = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
-  baseURL: "https://api.deepseek.com",
+  baseURL: "sk-5ec9f4540ece4edcaaa5e9bc22d312f6",
 });
 
 const __filename = fileURLToPath(import.meta.url);

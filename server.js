@@ -14,7 +14,6 @@ const client = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY,
   baseURL: "https://api.deepseek.com",
 });
-});
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);

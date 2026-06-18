@@ -195,6 +195,241 @@
     container.appendChild(wrap);
   }
 
+  function termPowerLabel(term) {
+    if (!term.variable) {
+      return "常数项";
+    }
+    return `${term.variable}${term.power === 2 ? "²" : ""} 项`;
+  }
+
+  function termGroupKey(term) {
+    return term.variable ? `${term.variable}_${term.power}` : "constant";
+  }
+
+  function formatTerm(term, leading = false) {
+    const negative = term.coef < 0;
+    const abs = Math.abs(term.coef);
+    const sign = negative ? "-" : leading ? "" : "+";
+
+    if (!term.variable) {
+      return `${sign}${abs}`;
+    }
+
+    const variablePart = `${term.variable}${term.power === 2 ? "²" : ""}`;
+    const coefficient = abs === 1 ? "" : String(abs);
+    return `${sign}${coefficient}${variablePart}`;
+  }
+
+  function termsToExpression(terms) {
+    function termBody(term) {
+      const abs = Math.abs(term.coef);
+      if (!term.variable) {
+        return String(abs);
+      }
+      const variablePart = `${term.variable}${term.power === 2 ? "²" : ""}`;
+      return `${abs === 1 ? "" : abs}${variablePart}`;
+    }
+
+    return terms
+      .map((term, index) => {
+        const sign = term.coef < 0 ? "-" : "+";
+        if (index === 0) {
+          return `${term.coef < 0 ? "-" : ""}${termBody(term)}`;
+        }
+        return `${sign} ${termBody(term)}`;
+      })
+      .join(" ");
+  }
+
+  function combineTerms(terms) {
+    const groups = new Map();
+    terms.forEach((term) => {
+      const key = termGroupKey(term);
+      if (!groups.has(key)) {
+        groups.set(key, { ...term, coef: 0 });
+      }
+      groups.get(key).coef += term.coef;
+    });
+
+    const combined = [...groups.values()].filter((term) => term.coef !== 0);
+    return combined.length > 0 ? termsToExpression(combined) : "0";
+  }
+
+  function groupTerms(terms) {
+    const groups = [];
+    terms.forEach((term) => {
+      const key = termGroupKey(term);
+      let group = groups.find((item) => item.key === key);
+      if (!group) {
+        group = {
+          key,
+          label: termPowerLabel(term),
+          terms: []
+        };
+        groups.push(group);
+      }
+      group.terms.push(term);
+    });
+    return groups;
+  }
+
+  function renderLikeTermSorter(model, container) {
+    const examples = [
+      [
+        { coef: 3, variable: "x", power: 1 },
+        { coef: 4 },
+        { coef: 2, variable: "x", power: 1 },
+        { coef: -1 }
+      ],
+      [
+        { coef: 2, variable: "x", power: 1 },
+        { coef: 5 },
+        { coef: 4, variable: "x", power: 1 },
+        { coef: -3 }
+      ],
+      [
+        { coef: 7, variable: "a", power: 1 },
+        { coef: -2 },
+        { coef: 3, variable: "a", power: 1 },
+        { coef: 6 }
+      ],
+      [
+        { coef: 5, variable: "y", power: 1 },
+        { coef: -4, variable: "y", power: 1 },
+        { coef: 8 },
+        { coef: -3 }
+      ],
+      [
+        { coef: 2, variable: "x", power: 2 },
+        { coef: 3, variable: "x", power: 1 },
+        { coef: 1, variable: "x", power: 2 },
+        { coef: -1, variable: "x", power: 1 },
+        { coef: 4 }
+      ]
+    ];
+
+    let index = 0;
+    let exampleQueue = [];
+    let step = 0;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "同类项合并实验台",
+      "先按同类项归类，再分别合并；x² 项、x 项和常数项不能混在一起合并。"
+    );
+
+    stage.classList.add("like-term-stage");
+    const expressionBox = createEl("div", "expression-focus");
+    const legend = createEl("div", "like-term-legend");
+    const groupBoard = createEl("div", "like-term-groups");
+    stage.append(expressionBox, legend, groupBoard);
+
+    const stepButtons = [
+      makeButton("第一步：识别同类项", () => {
+        step = 1;
+        draw();
+      }),
+      makeButton("第二步：分别合并", () => {
+        step = 2;
+        draw();
+      }),
+      makeButton("第三步：得到结果", () => {
+        step = 3;
+        draw();
+      }),
+      makeButton("换一个例子", () => {
+        index = nextExampleIndex();
+        step = 0;
+        draw();
+      })
+    ];
+    stepButtons.forEach((button) => controls.appendChild(button));
+
+    function nextExampleIndex() {
+      if (exampleQueue.length === 0) {
+        exampleQueue = examples
+          .map((_, exampleIndex) => exampleIndex)
+          .filter((exampleIndex) => exampleIndex !== index)
+          .sort(() => Math.random() - 0.5);
+      }
+      return exampleQueue.shift();
+    }
+
+    function termCard(term) {
+      const className = term.variable
+        ? `like-term-card variable-term${term.power === 2 ? " square-term" : ""}${term.coef < 0 ? " negative" : ""}`
+        : `like-term-card constant-term${term.coef < 0 ? " negative" : ""}`;
+      const label = !term.variable && term.coef > 0 ? `+${term.coef}` : formatTerm(term, true);
+      return createEl("span", className, label);
+    }
+
+    function groupedExpression(groups) {
+      return groups.map((group) => `(${termsToExpression(group.terms)})`).join(" + ").replace(/\+ \(/g, "+ (");
+    }
+
+    function explanationFor(terms, groups) {
+      const hasSquare = terms.some((term) => term.power === 2);
+      const firstVariableGroup = groups.find((group) => group.key !== "constant");
+      const constantGroup = groups.find((group) => group.key === "constant");
+      const variableText = firstVariableGroup
+        ? `${firstVariableGroup.terms.map((term) => formatTerm(term, true)).join(" 和 ")} 都属于 ${firstVariableGroup.label}，所以可以合并。`
+        : "";
+      const constantText = constantGroup
+        ? `${constantGroup.terms.map((term) => formatTerm(term, true)).join(" 和 ")} 都是常数，所以可以合并。`
+        : "";
+      const squareText = hasSquare ? "注意：x² 与 x 的字母指数不同，不是同类项，不能合并。" : "x 项和常数项不是同类项，不能合并。";
+      return [variableText, constantText, squareText].filter(Boolean);
+    }
+
+    function draw() {
+      const terms = examples[index];
+      const groups = groupTerms(terms);
+      const original = termsToExpression(terms);
+      const grouped = groupedExpression(groups);
+      const combined = combineTerms(terms);
+
+      expressionBox.innerHTML = `<strong>原式：</strong><span>${original}</span>`;
+      legend.replaceChildren(
+        createEl("span", "legend-chip variable-term", "蓝色表示含字母的同类项"),
+        createEl("span", "legend-chip constant-term", "橙色表示常数项"),
+        createEl("span", "legend-note", "只有同类项之间才能合并")
+      );
+
+      groupBoard.replaceChildren();
+      groups.forEach((group) => {
+        const groupEl = createEl("div", "like-term-group");
+        groupEl.appendChild(createEl("h4", "", group.label));
+        const cards = createEl("div", "like-term-card-row");
+        group.terms.forEach((term) => cards.appendChild(termCard(term)));
+        groupEl.appendChild(cards);
+        groupBoard.appendChild(groupEl);
+      });
+
+      stepButtons.forEach((button, buttonIndex) => {
+        button.classList.toggle("is-active", buttonIndex === step - 1);
+      });
+
+      result.replaceChildren();
+      const title = createEl("strong", "", step === 0 ? "操作提示" : `第 ${step} 步`);
+      const body = createEl("div", "step-explanation");
+      if (step === 0) {
+        body.appendChild(createEl("p", "", "点击步骤按钮，观察从识别同类项到得到结果的完整过程。"));
+      } else if (step === 1) {
+        body.appendChild(createEl("p", "", `把同类项放在一起：${grouped}`));
+        explanationFor(terms, groups).forEach((text) => body.appendChild(createEl("p", "", text)));
+      } else if (step === 2) {
+        body.appendChild(createEl("p", "", `分别计算：${combined}`));
+        body.appendChild(createEl("p", "", "合并同类项时，只把系数相加，字母和字母指数保持不变。"));
+      } else {
+        body.appendChild(createEl("p", "", `最终结果：${original} = ${combined}`));
+        body.appendChild(createEl("p", "", "先归类，再合并；不同类的项保留下来，不能硬凑在一起。"));
+      }
+      result.append(title, body);
+    }
+
+    draw();
+    container.appendChild(wrap);
+  }
+
   function renderAlgebraTiles(model, container) {
     const options = [
       { name: "合并同类项", x2: 1, x: 3, one: 4, result: "x² + 3x + 4" },
@@ -235,6 +470,267 @@
     draw();
     container.appendChild(wrap);
   }
+
+  function renderAreaTileModel(model, container, config) {
+    let index = 0;
+    const { wrap, stage, controls, result } = buildShell(model, config.label, config.tip);
+    const board = createEl("div", "tile-board");
+    stage.appendChild(board);
+
+    function addTiles(count, className, label) {
+      const amount = Math.min(Math.abs(count), 14);
+      for (let i = 0; i < amount; i += 1) {
+        const tile = createEl("span", `algebra-tile ${className}${count < 0 ? " negative" : ""}`, label);
+        board.appendChild(tile);
+      }
+    }
+
+    function draw() {
+      const option = config.options[index];
+      board.replaceChildren();
+      addTiles(option.x2 || 0, "tile-x2", "x²");
+      addTiles(option.x || 0, "tile-x", "x");
+      addTiles(option.one || 0, "tile-one", "1");
+      result.textContent = `${option.name}：${option.result}`;
+    }
+
+    controls.appendChild(makeButton(config.button, () => {
+      index = (index + 1) % config.options.length;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderAreaMultiplication(model, container) {
+    renderAreaTileModel(model, container, {
+      label: "面积乘法模型",
+      tip: "把长和宽拆成几段，面积分块相加，就是多项式乘法的分配过程。",
+      button: "换一个乘法例子",
+      options: [
+        { name: "单项式乘多项式", x2: 2, x: 6, one: 0, result: "2x(x+3)=2x²+6x" },
+        { name: "多项式乘多项式", x2: 1, x: 5, one: 6, result: "(x+2)(x+3)=x²+5x+6" },
+        { name: "含常数项乘法", x2: 1, x: 4, one: 3, result: "(x+1)(x+3)=x²+4x+3" }
+      ]
+    });
+  }
+
+  function renderSquareFormulaArea(model, container) {
+    renderAreaTileModel(model, container, {
+      label: "乘法公式面积模型",
+      tip: "用正方形和长方形分块观察公式，重点是公式结构，不是合并同类项。",
+      button: "换一个公式例子",
+      options: [
+        { name: "完全平方公式", x2: 1, x: 6, one: 9, result: "(x+3)²=x²+6x+9" },
+        { name: "平方差公式", x2: 1, x: 0, one: -16, result: "(x+4)(x-4)=x²-16" },
+        { name: "完全平方公式", x2: 1, x: 10, one: 25, result: "(x+5)²=x²+10x+25" }
+      ]
+    });
+  }
+
+  function renderReverseAreaFactorization(model, container) {
+    renderAreaTileModel(model, container, {
+      label: "反向面积分解",
+      tip: "把已有面积块重新排成长方形，反向读出边长，就是因式分解。",
+      button: "换一个分解例子",
+      options: [
+        { name: "提公因式", x2: 0, x: 4, one: 8, result: "4x+8=4(x+2)" },
+        { name: "平方差", x2: 1, x: 0, one: -9, result: "x²-9=(x+3)(x-3)" },
+        { name: "完全平方", x2: 1, x: 6, one: 9, result: "x²+6x+9=(x+3)²" }
+      ]
+    });
+  }
+
+  function formatLinearEquation(eq) {
+    const xPart = eq.a === 1 ? "x" : `${eq.a}x`;
+    if (eq.b === 0) {
+      return `${xPart} = ${eq.c}`;
+    }
+    return `${xPart} ${eq.b > 0 ? "+" : "-"} ${Math.abs(eq.b)} = ${eq.c}`;
+  }
+
+  function renderEquationStepBalance(model, container) {
+    const equations = [
+      { a: 2, b: 3, solution: 4 },
+      { a: 3, b: 2, solution: 4 },
+      { a: 4, b: -5, solution: 5 },
+      { a: 2, b: 7, solution: 6 },
+      { a: 5, b: -3, solution: 3 }
+    ].map((eq) => ({ ...eq, c: eq.a * eq.solution + eq.b }));
+
+    let index = 0;
+    let step = 0;
+    let errorMessage = "";
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "等式天平实验台",
+      "解方程时，等式两边必须同时进行相同的操作。先消去常数项，再求出一个 x 的值。"
+    );
+
+    stage.classList.add("step-balance-stage");
+    const equationFocus = createEl("div", "equation-focus");
+    const balance = createEl("div", "step-balance");
+    const leftPan = createEl("div", "step-pan");
+    const rightPan = createEl("div", "step-pan");
+    const beam = createEl("div", "step-beam");
+    const support = createEl("div", "step-support");
+    const panRow = createEl("div", "step-pan-row");
+    panRow.append(leftPan, rightPan);
+    balance.append(beam, support, panRow);
+    const legend = createEl("div", "equation-legend");
+    legend.append(
+      createEl("span", "equation-chip x-chip", "x 表示未知数"),
+      createEl("span", "equation-chip unit-chip", "1 表示一个单位"),
+      createEl("span", "equation-chip equal-chip", "横梁水平表示等式成立")
+    );
+    stage.append(equationFocus, balance, legend);
+
+    const constantButton = makeButton("", () => {
+      if (step === 0) {
+        step = 1;
+        errorMessage = "";
+        draw();
+      }
+    });
+    const divideButton = makeButton("", () => {
+      if (step < 1) {
+        errorMessage = "请先消去常数项。等式两边必须进行相同操作，不能只处理一边。";
+        balance.classList.add("is-tilted");
+        draw();
+        window.setTimeout(() => balance.classList.remove("is-tilted"), 700);
+        return;
+      }
+      step = 2;
+      errorMessage = "";
+      draw();
+    });
+    const backButton = makeButton("上一步", () => {
+      step = Math.max(0, step - 1);
+      errorMessage = "";
+      draw();
+    });
+    const resetButton = makeButton("重置", () => {
+      step = 0;
+      errorMessage = "";
+      draw();
+    });
+    const changeButton = makeButton("换一道方程", () => {
+      const previous = index;
+      while (index === previous && equations.length > 1) {
+        index = Math.floor(Math.random() * equations.length);
+      }
+      step = 0;
+      errorMessage = "";
+      draw();
+    });
+    controls.append(constantButton, divideButton, backButton, resetButton, changeButton);
+
+    function addBlocks(target, xCount, unitCount) {
+      target.replaceChildren();
+      const blockRow = createEl("div", "equation-block-row");
+      for (let i = 0; i < xCount; i += 1) {
+        blockRow.appendChild(createEl("span", "equation-block x-block", "x"));
+      }
+      const unitAmount = Math.abs(unitCount);
+      for (let i = 0; i < unitAmount; i += 1) {
+        blockRow.appendChild(createEl("span", `equation-block unit-block${unitCount < 0 ? " negative" : ""}`, unitCount < 0 ? "-1" : "1"));
+      }
+      target.appendChild(blockRow);
+    }
+
+    function currentState(eq) {
+      if (step === 0) {
+        return {
+          equation: formatLinearEquation(eq),
+          leftLabel: `${eq.a}x ${eq.b > 0 ? "+" : "-"} ${Math.abs(eq.b)}`,
+          rightLabel: `${eq.c}`,
+          leftX: eq.a,
+          leftUnits: eq.b,
+          rightUnits: eq.c,
+          note: `当前方程：${formatLinearEquation(eq)}。左托盘是 ${eq.a} 个 x 和 ${Math.abs(eq.b)} 个${eq.b < 0 ? "负" : ""}单位块，右托盘是 ${eq.c} 个单位块。`
+        };
+      }
+      if (step === 1) {
+        return {
+          equation: `${eq.a}x = ${eq.c - eq.b}`,
+          leftLabel: `${eq.a}x`,
+          rightLabel: `${eq.c - eq.b}`,
+          leftX: eq.a,
+          leftUnits: 0,
+          rightUnits: eq.c - eq.b,
+          note: `两边同时${eq.b > 0 ? `减 ${eq.b}` : `加 ${Math.abs(eq.b)}`}，等式仍然成立，得到 ${eq.a}x = ${eq.c - eq.b}。`
+        };
+      }
+      return {
+        equation: `x = ${eq.solution}`,
+        leftLabel: "x",
+        rightLabel: `${eq.solution}`,
+        leftX: 1,
+        leftUnits: 0,
+        rightUnits: eq.solution,
+        note: `两边同时除以 ${eq.a}，得到一个 x 的值：x = ${eq.solution}。`
+      };
+    }
+
+    function renderVerification(eq) {
+      const panel = createEl("div", "verify-panel");
+      const label = createEl("label", "custom-slider");
+      const valueEl = createEl("strong", "", String(eq.solution));
+      const input = document.createElement("input");
+      const readout = createEl("p", "verify-readout");
+      input.type = "range";
+      input.min = String(eq.solution - 4);
+      input.max = String(eq.solution + 4);
+      input.step = "1";
+      input.value = String(eq.solution);
+
+      function update() {
+        const value = Number(input.value);
+        const left = eq.a * value + eq.b;
+        valueEl.textContent = String(value);
+        readout.textContent = left === eq.c
+          ? `左边 = ${eq.a} × ${value} ${eq.b >= 0 ? "+" : "-"} ${Math.abs(eq.b)} = ${left}；右边 = ${eq.c}。左右相等，x = ${value} 是方程的解。`
+          : `左边 = ${eq.a} × ${value} ${eq.b >= 0 ? "+" : "-"} ${Math.abs(eq.b)} = ${left}；右边 = ${eq.c}。左右不相等，继续尝试。`;
+      }
+
+      input.addEventListener("input", update);
+      const head = createEl("span", "custom-slider-label");
+      head.append(createEl("span", "", "验证 x 的值"), valueEl);
+      label.append(head, input);
+      panel.append(createEl("strong", "", "验证答案"), label, readout);
+      update();
+      return panel;
+    }
+
+    function draw() {
+      const eq = equations[index];
+      const state = currentState(eq);
+      equationFocus.innerHTML = `<strong>当前方程：</strong><span>${state.equation}</span>`;
+      constantButton.textContent = eq.b > 0 ? `两边同时减 ${eq.b}` : `两边同时加 ${Math.abs(eq.b)}`;
+      divideButton.textContent = `两边同时除以 ${eq.a}`;
+      addBlocks(leftPan, state.leftX, state.leftUnits);
+      addBlocks(rightPan, 0, state.rightUnits);
+      leftPan.insertBefore(createEl("strong", "pan-label", `左托盘：${state.leftLabel}`), leftPan.firstChild);
+      rightPan.insertBefore(createEl("strong", "pan-label", `右托盘：${state.rightLabel}`), rightPan.firstChild);
+
+      result.replaceChildren();
+      result.appendChild(createEl("strong", "", step === 2 ? `方程的解：x = ${eq.solution}` : "解题过程"));
+      result.appendChild(createEl("p", "", errorMessage || state.note));
+      if (step === 2) {
+        const summary = createEl("div", "solution-summary");
+        summary.append(
+          createEl("span", "", formatLinearEquation(eq)),
+          createEl("span", "", `${eq.a}x = ${eq.c - eq.b}`),
+          createEl("span", "", `x = ${eq.solution}`)
+        );
+        result.append(createEl("p", "", "你刚才完成了："), summary, renderVerification(eq));
+      }
+    }
+
+    draw();
+    container.appendChild(wrap);
+  }
+
 
   function renderFractionBars(model, container) {
     const radicalMode = model.id === "quadratic-radical";
@@ -687,7 +1183,12 @@
   const renderers = {
     "number-line": renderNumberLine,
     "equation-balance": renderEquationBalance,
+    "equation-step-balance": renderEquationStepBalance,
+    "like-term-sorter": renderLikeTermSorter,
     "algebra-tiles": renderAlgebraTiles,
+    "area-multiplication": renderAreaMultiplication,
+    "square-formula-area": renderSquareFormulaArea,
+    "reverse-area-factorization": renderReverseAreaFactorization,
     "fraction-bars": renderFractionBars,
     "angle-lines": renderAngleLines,
     "symmetry-mirror": renderSymmetryMirror,

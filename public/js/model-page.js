@@ -964,6 +964,14 @@
     const normalized = normalizeAnswer(userAnswer);
     const numbers = extractNumbers(userAnswer);
     const tolerance = Number(question.tolerance) || 0.01;
+    const mathMatch = window.AnswerJudgement?.explainAnswerMatch?.(userAnswer, question.answer, {
+      ...question,
+      tolerance
+    });
+
+    if (mathMatch?.correct) {
+      return true;
+    }
 
     if (Array.isArray(question.answerNumbers) && question.answerNumbers.length > 0) {
       if (numbers.length === 0) {
@@ -1141,6 +1149,10 @@
 
     let correct = gradeAnswerLocally(userAnswer, currentQuestion);
     let feedback = "";
+    const mathFeedback = window.AnswerJudgement?.explainAnswerMatch?.(userAnswer, currentQuestion.answer, currentQuestion);
+    if (correct === true && mathFeedback?.equivalent && mathFeedback.reason) {
+      feedback = mathFeedback.reason;
+    }
 
     if (correct === null) {
       try {

@@ -1847,22 +1847,38 @@
     const userText = normalizedText(userAnswer);
     const answerText = normalizedText(question.answer);
     const aliases = (question.aliases || []).map(normalizedText);
+    const mathMatch = window.AnswerJudgement?.explainAnswerMatch?.(userAnswer, question.answer, question);
     let correct = false;
+    let cause = "";
 
-    if (typeof question.answerValue === "number" && Number.isFinite(question.answerValue)) {
+    if (mathMatch?.correct) {
+      correct = true;
+      cause = mathMatch.reason || "思路正确，答案匹配。";
+    }
+
+    if (!correct && typeof question.answerValue === "number" && Number.isFinite(question.answerValue)) {
       const userNumbers = extractNumbers(userAnswer);
       correct = userNumbers.some((value) => Math.abs(value - Number(question.answerValue)) <= 0.01);
+      if (correct) {
+        cause = "思路正确，答案匹配。";
+      }
     }
 
     if (!correct) {
       correct = matchesSignedSemanticAnswer(userAnswer, question);
+      if (correct) {
+        cause = "思路正确，答案匹配。";
+      }
     }
 
     if (!correct) {
       correct = userText === answerText || aliases.some((alias) => alias && userText.includes(alias));
+      if (correct) {
+        cause = "思路正确，答案匹配。";
+      }
     }
 
-    const cause = correct ? "思路正确，答案匹配。" : inferErrorCause(userAnswer, question);
+    cause = correct ? cause || "思路正确，答案匹配。" : inferErrorCause(userAnswer, question);
     return {
       correct,
       userAnswer,
@@ -1872,6 +1888,12 @@
   }
 
   function inferErrorCause(userAnswer, question) {
+    const userMathValue = window.AnswerJudgement?.parseMathValue?.(userAnswer);
+    const answerMathValue = window.AnswerJudgement?.parseMathValue?.(question.answer);
+    if (userMathValue !== null && userMathValue !== undefined && answerMathValue !== null && answerMathValue !== undefined) {
+      return "你的答案和标准答案数值不等价，建议把分数、小数或百分数先化成同一种形式再比较。";
+    }
+
     const numbers = extractNumbers(userAnswer);
     if (typeof question.answerValue === "number" && numbers.length === 0) {
       return "答案里没有可判断的数字，可能漏写了计算结果。";

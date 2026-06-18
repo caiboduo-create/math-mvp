@@ -6,23 +6,14 @@
   const model = registry.getModel(modelId);
   const round = registry.round;
   const state = {};
-  let currentAiProblem = null;
-  const problemJsonKeys = ["question", "hint", "steps", "answer"];
-  const problemSections = [
-    ["question", "📘 题目"],
-    ["hint", "💡 提示"],
-    ["steps", "🧠 步骤"],
-    ["answer", "🎯 答案"]
-  ];
+  let currentQuestion = null;
+  const recentQuestionTexts = [];
 
   const title = document.getElementById("modelTitle");
   const description = document.getElementById("modelDescription");
   const sliders = document.getElementById("sliderPanel");
   const metrics = document.getElementById("metricPanel");
   const explanation = document.getElementById("aiExplanation");
-  const exerciseQuestion = document.getElementById("exerciseQuestion");
-  const exerciseAnswer = document.getElementById("exerciseAnswer");
-  const answerToggle = document.getElementById("answerToggle");
   const askForm = document.getElementById("askForm");
   const askInput = document.getElementById("askInput");
   const askResult = document.getElementById("askResult");
@@ -41,8 +32,6 @@
     sliders.innerHTML = "";
     metrics.innerHTML = "";
     explanation.textContent = "当前 URL 没有提供有效的模型 id。";
-    exerciseQuestion.textContent = "暂无练习题。";
-    answerToggle.hidden = true;
     askForm.hidden = true;
     if (generateProblemButton) {
       generateProblemButton.disabled = true;
@@ -194,12 +183,7 @@
   }
 
   function renderContent() {
-    const exercise = model.exercise(state);
     explanation.textContent = model.explanation(state);
-    exerciseQuestion.textContent = exercise.question;
-    exerciseAnswer.textContent = exercise.answer;
-    exerciseAnswer.hidden = true;
-    answerToggle.textContent = "查看答案";
   }
 
   function renderAll() {
@@ -305,96 +289,159 @@
     return model.params.map((param) => `${param.label}=${round(state[param.key])}${param.unit || ""}`).join("，");
   }
 
-  function buildProblemPrompt() {
-    return [
-      "请生成 1 道结构化数学应用题。",
-      `模型：${model.name}（id=${model.id}）`,
-      `当前参数：${currentParameterText()}`,
-      `模型说明：${model.description}`,
-      "只返回 JSON。"
-    ].join("\n");
+  function randomInt(min, max) {
+    return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 
-  function buildGradePrompt(userAnswer) {
-    return [
-      "请扮演数学老师，对学生答案进行自动批改。",
-      `模型：${model.name}（id=${model.id}）`,
-      `当前参数：${currentParameterText()}`,
-      `题目：${currentAiProblem.question}`,
-      `提示：${currentAiProblem.hint}`,
-      `参考步骤：${currentAiProblem.steps.join("；")}`,
-      `参考答案：${currentAiProblem.answer}`,
-      `学生答案：${userAnswer}`,
-      "请严格按下面格式返回：",
-      "判断结果：只写 正确 或 错误",
-      "正确步骤：给出清晰步骤和关键公式",
-      "错误原因：如果错误，说明错在哪里；如果正确，写“无”。"
-    ].join("\n");
+  function choice(items) {
+    return items[randomInt(0, items.length - 1)];
   }
 
-  function parseCorrectness(aiText) {
-    const lines = aiText.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
-    const resultLine = lines.find((line) => /^判断结果[:：]/.test(line));
-
-    if (resultLine) {
-      const hasCorrect = resultLine.includes("正确");
-      const hasWrong = resultLine.includes("错误") || resultLine.includes("不正确");
-      return hasCorrect && !hasWrong;
-    }
-
-    return false;
+  function cleanNumber(value) {
+    return Number(round(value, 2));
   }
 
-  function renderGradeResult(aiText, correct) {
-    gradeResult.hidden = false;
-    gradeResult.className = `grade-result-card ${correct ? "is-correct" : "is-wrong"}`;
-    gradeResult.textContent = `${correct ? "✔ 判断：正确" : "✘ 判断：需要订正"}\n\n${aiText}`;
+  function answerText(value, unit) {
+    return `${round(value, 2)}${unit}`;
   }
 
-  function parseProblemJson(aiText) {
-    try {
-      if (typeof aiText !== "string") {
-        throw new Error("invalid-type");
+  function squaredUnit(unit) {
+    return `平方${unit}`;
+  }
+
+  function nearCurrent(value, min, max, variance = 0.45) {
+    const lower = Math.max(min, Math.floor(value * (1 - variance)));
+    const upper = Math.min(max, Math.ceil(value * (1 + variance)));
+    return randomInt(lower, Math.max(lower, upper));
+  }
+
+  function buildGeneratedQuestion() {
+    const units = ["厘米", "米", "毫米"];
+    const unit = choice(units);
+    const askAreaText = [
+      "求它的面积。",
+      "这个图形的面积是多少？",
+      "请计算它的面积。",
+      "它占地多少平方单位？"
+    ];
+
+    if (model.id === "circle") {
+      const radius = nearCurrent(state.radius, 2, 18);
+      const mode = choice(["area", "circumference"]);
+
+      if (mode === "circumference") {
+        const value = cleanNumber(2 * Math.PI * radius);
+        return {
+          question: choice([
+            `一个圆形跑道的半径是 ${radius}${unit}，求它的周长。`,
+            `圆形徽章半径为 ${radius}${unit}，它的边缘长度约是多少？`,
+            `半径为 ${radius}${unit} 的圆，周长约是多少？`
+          ]),
+          answer: answerText(value, unit),
+          answerValue: value,
+          tolerance: Math.max(0.1, value * 0.02),
+          steps: [`已知半径 r=${radius}${unit}`, "圆的周长公式：C = 2πr", `C≈2×3.14×${radius}=${round(value, 2)}${unit}`],
+          explanation: "周长表示绕圆一圈的长度，只需要把半径代入 2πr。"
+        };
       }
 
-      const text = aiText.trim();
-      if (!text.startsWith("{") || !text.endsWith("}")) {
-        throw new Error("invalid-json-wrapper");
-      }
-
-      const parsed = JSON.parse(text);
-      const parsedKeys = parsed && typeof parsed === "object" && !Array.isArray(parsed)
-        ? Object.keys(parsed)
-        : [];
-      const hasOnlyExpectedKeys =
-        parsedKeys.length === problemJsonKeys.length &&
-        problemJsonKeys.every((key) => parsedKeys.includes(key));
-      const steps = Array.isArray(parsed?.steps)
-        ? parsed.steps.map((step) => (typeof step === "string" ? step.trim() : "")).filter(Boolean)
-        : [];
-      const question = typeof parsed?.question === "string" ? parsed.question.trim() : "";
-      const hint = typeof parsed?.hint === "string" ? parsed.hint.trim() : "";
-      const answer = typeof parsed?.answer === "string" ? parsed.answer.trim() : "";
-      const hasValidShape =
-        hasOnlyExpectedKeys &&
-        question &&
-        hint &&
-        steps.length > 0 &&
-        answer;
-
-      if (!hasValidShape) {
-        throw new Error("invalid-shape");
-      }
-
+      const value = cleanNumber(Math.PI * radius * radius);
       return {
-        question,
-        hint,
-        steps,
-        answer
+        question: choice([
+          `一个圆形花坛的半径是 ${radius}${unit}，${choice(askAreaText)}`,
+          `半径为 ${radius}${unit} 的圆形纸片，面积约是多少？`,
+          `学校画了一个半径 ${radius}${unit} 的圆，求这个圆的面积。`
+        ]),
+        answer: answerText(value, squaredUnit(unit)),
+        answerValue: value,
+        tolerance: Math.max(0.1, value * 0.02),
+        steps: [`已知半径 r=${radius}${unit}`, "圆面积公式：S = πr²", `S≈3.14×${radius}²=${round(value, 2)}${squaredUnit(unit)}`],
+        explanation: "圆面积和半径的平方有关，半径变大时面积增长更快。"
       };
-    } catch (error) {
-      throw new Error("problem-json-invalid");
     }
+
+    if (model.id === "triangle") {
+      const base = nearCurrent(state.base, 4, 24);
+      const height = nearCurrent(state.height, 3, 20);
+      const value = cleanNumber((base * height) / 2);
+      return {
+        question: choice([
+          `一个三角形的底边长为 ${base}${unit}，高为 ${height}${unit}，${choice(askAreaText)}`,
+          `一块三角形广告牌底边 ${base}${unit}、高 ${height}${unit}，面积是多少？`,
+          `三角形小旗的底是 ${base}${unit}，对应高是 ${height}${unit}，请算出面积。`,
+          `底边为 ${base}${unit}、高为 ${height}${unit} 的三角形，面积等于多少？`
+        ]),
+        answer: answerText(value, squaredUnit(unit)),
+        answerValue: value,
+        tolerance: Math.max(0.05, value * 0.02),
+        steps: [`已知底 b=${base}${unit}，高 h=${height}${unit}`, "三角形面积公式：S = b×h÷2", `S=${base}×${height}÷2=${round(value, 2)}${squaredUnit(unit)}`],
+        explanation: "三角形面积等于同底同高长方形面积的一半。"
+      };
+    }
+
+    if (model.id === "parabola") {
+      const a = choice([-2, -1, 1, 2]);
+      const h = nearCurrent(state.h, -5, 5, 1);
+      const k = nearCurrent(state.k, -6, 6, 1);
+      const x = h + choice([-3, -2, -1, 1, 2, 3]);
+      const value = cleanNumber(a * Math.pow(x - h, 2) + k);
+      return {
+        question: choice([
+          `已知抛物线 y=${a}(x-${h})²+${k}，当 x=${x} 时，y 的值是多少？`,
+          `一条抛物线满足 y=${a}(x-${h})²+${k}，代入 x=${x}，求 y。`,
+          `函数 y=${a}(x-${h})²+${k} 中，x=${x} 对应的函数值是多少？`
+        ]),
+        answer: `${round(value, 2)}`,
+        answerValue: value,
+        tolerance: 0.05,
+        steps: [`把 x=${x} 代入 y=${a}(x-${h})²+${k}`, `y=${a}×(${x}-${h})²+${k}`, `y=${round(value, 2)}`],
+        explanation: "顶点式中先算括号里的差，再平方、乘系数，最后加上 k。"
+      };
+    }
+
+    const radius = nearCurrent(state.radius || 6, 2, 18);
+    const angle = randomInt(2, 12) * 15;
+    const mode = choice(["area", "arc"]);
+
+    if (mode === "arc") {
+      const value = cleanNumber((angle / 360) * 2 * Math.PI * radius);
+      return {
+        question: choice([
+          `一个扇形半径为 ${radius}${unit}，圆心角为 ${angle}°，求它的弧长。`,
+          `半径 ${radius}${unit}、圆心角 ${angle}° 的扇形，弧长约是多少？`,
+          `扇形草坪的半径是 ${radius}${unit}，圆心角是 ${angle}°，它的弧长约为多少？`
+        ]),
+        answer: answerText(value, unit),
+        answerValue: value,
+        tolerance: Math.max(0.1, value * 0.03),
+        steps: [`已知 r=${radius}${unit}，θ=${angle}°`, "弧长公式：L = θ/360° × 2πr", `L≈${angle}/360×2×3.14×${radius}=${round(value, 2)}${unit}`],
+        explanation: "扇形弧长就是整圆周长按圆心角比例取一部分。"
+      };
+    }
+
+    const value = cleanNumber((angle / 360) * Math.PI * radius * radius);
+    return {
+      question: choice([
+        `一个扇形半径为 ${radius}${unit}，圆心角为 ${angle}°，求它的面积。`,
+        `半径 ${radius}${unit}、圆心角 ${angle}° 的扇形，面积约是多少？`,
+        `扇形纸片的半径是 ${radius}${unit}，圆心角是 ${angle}°，请计算面积。`
+      ]),
+      answer: answerText(value, squaredUnit(unit)),
+      answerValue: value,
+      tolerance: Math.max(0.1, value * 0.03),
+      steps: [`已知 r=${radius}${unit}，θ=${angle}°`, "扇形面积公式：S = θ/360° × πr²", `S≈${angle}/360×3.14×${radius}²=${round(value, 2)}${squaredUnit(unit)}`],
+      explanation: "扇形面积等于整圆面积按圆心角比例取一部分。"
+    };
+  }
+
+  function extractNumbers(text) {
+    const matches = text.match(/-?\d+(?:\.\d+)?/g) || [];
+    return matches.map(Number).filter((value) => Number.isFinite(value));
+  }
+
+  function isAnswerCorrect(userAnswer, question) {
+    const numbers = extractNumbers(userAnswer);
+    return numbers.some((value) => Math.abs(value - question.answerValue) <= question.tolerance);
   }
 
   function createProblemSection(titleText, content) {
@@ -422,54 +469,54 @@
     return section;
   }
 
-  function renderStructuredProblem(problem) {
+  function renderQuestion(problem) {
     aiProblemBox.classList.remove("muted-box", "format-error");
-    aiProblemBox.replaceChildren(
-      ...problemSections.map(([key, titleText]) => createProblemSection(titleText, problem[key]))
+    aiProblemBox.replaceChildren(createProblemSection("题目", problem.question));
+  }
+
+  function renderGradeResult(problem, userAnswer, correct) {
+    gradeResult.hidden = false;
+    gradeResult.className = `grade-result-card ${correct ? "is-correct" : "is-wrong"}`;
+    gradeResult.replaceChildren(
+      createProblemSection("是否正确", correct ? "正确" : "错误"),
+      createProblemSection("你的答案", userAnswer),
+      createProblemSection("正确答案", problem.answer),
+      createProblemSection("解题步骤", problem.steps),
+      createProblemSection("简单讲解", problem.explanation)
     );
   }
 
-  function renderProblemFormatError() {
-    aiProblemBox.classList.remove("muted-box");
-    aiProblemBox.classList.add("format-error");
-    aiProblemBox.replaceChildren(createProblemSection("格式错误", "AI返回格式错误，请重试"));
-  }
-
-  answerToggle.addEventListener("click", () => {
-    exerciseAnswer.hidden = !exerciseAnswer.hidden;
-    answerToggle.textContent = exerciseAnswer.hidden ? "查看答案" : "收起答案";
-  });
-
-  generateProblemButton.addEventListener("click", async () => {
+  generateProblemButton.addEventListener("click", () => {
     aiProblemBox.textContent = "AI 正在出题...";
     aiProblemBox.classList.remove("muted-box", "format-error");
-    gradeForm.hidden = true;
     gradeResult.hidden = true;
+    gradeResult.replaceChildren();
     studentAnswer.value = "";
     generateProblemButton.disabled = true;
 
-    try {
-      const aiText = await askAi(buildProblemPrompt(), { intent: "generate_problem" });
-      currentAiProblem = parseProblemJson(aiText);
-      renderStructuredProblem(currentAiProblem);
-      gradeForm.hidden = false;
-    } catch (error) {
-      currentAiProblem = null;
-      if (error.message === "problem-json-invalid") {
-        renderProblemFormatError();
-      } else {
-        renderProblemFormatError();
+    window.setTimeout(() => {
+      let nextQuestion = buildGeneratedQuestion();
+      for (let attempt = 0; attempt < 12 && recentQuestionTexts.includes(nextQuestion.question); attempt += 1) {
+        nextQuestion = buildGeneratedQuestion();
       }
-    } finally {
+
+      currentQuestion = nextQuestion;
+      recentQuestionTexts.push(currentQuestion.question);
+      if (recentQuestionTexts.length > 12) {
+        recentQuestionTexts.shift();
+      }
+
+      renderQuestion(currentQuestion);
+      gradeForm.hidden = false;
       generateProblemButton.disabled = false;
-    }
+    }, 120);
   });
 
   gradeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const userAnswer = studentAnswer.value.trim();
 
-    if (!currentAiProblem) {
+    if (!currentQuestion) {
       gradeResult.hidden = false;
       gradeResult.className = "grade-result-card is-wrong";
       gradeResult.textContent = "请先点击“AI出题”生成题目。";
@@ -483,19 +530,9 @@
       return;
     }
 
-    gradeResult.hidden = false;
-    gradeResult.className = "grade-result-card";
-    gradeResult.textContent = "AI 正在批改...";
-
-    try {
-      const aiText = await askAi(buildGradePrompt(userAnswer));
-      const correct = parseCorrectness(aiText);
-      renderGradeResult(aiText, correct);
-      recordMistake(currentAiProblem.question, userAnswer, correct);
-    } catch (error) {
-      gradeResult.className = "grade-result-card is-wrong";
-      gradeResult.textContent = error.message || "AI 批改失败，请稍后再试。";
-    }
+    const correct = isAnswerCorrect(userAnswer, currentQuestion);
+    renderGradeResult(currentQuestion, userAnswer, correct);
+    recordMistake(currentQuestion.question, userAnswer, correct);
   });
 
   askForm.addEventListener("submit", async (event) => {

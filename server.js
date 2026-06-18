@@ -13,7 +13,7 @@ const publicDir = path.join(__dirname, "public");
 
 const PORT = Number(process.env.PORT || 3001);
 const DEEPSEEK_MODEL = "deepseek-chat";
-const PROBLEM_JSON_KEYS = ["question", "hint", "steps", "answer"];
+const PROBLEM_JSON_KEYS = ["question", "answer", "steps", "explanation"];
 
 function createDeepSeekClient() {
   if (!process.env.DEEPSEEK_API_KEY) {
@@ -32,59 +32,69 @@ function round(value, digits = 2) {
   return Number(value).toFixed(digits).replace(/\.?0+$/, "");
 }
 
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function choice(items) {
+  return items[randomInt(0, items.length - 1)];
+}
+
 function localStructuredProblem({ modelId, modelName, parameters }) {
   const p = parameters || {};
-  const radius = Number(p.radius || 5);
-  const base = Number(p.base || 8);
-  const height = Number(p.height || 6);
-  const a = Number(p.a || 1);
-  const h = Number(p.h || 0);
-  const k = Number(p.k || 0);
-  const angle = Number(p.angle || 120);
+  const unit = choice(["厘米", "米", "毫米"]);
+  const radius = randomInt(2, Math.max(4, Math.round(Number(p.radius || 5) * 2)));
+  const base = randomInt(4, Math.max(6, Math.round(Number(p.base || 8) * 2)));
+  const height = randomInt(3, Math.max(5, Math.round(Number(p.height || 6) * 2)));
+  const a = choice([-2, -1, 1, 2]);
+  const h = randomInt(-4, 4);
+  const k = randomInt(-5, 5);
+  const x = h + choice([-3, -2, -1, 1, 2, 3]);
+  const angle = randomInt(2, 12) * 15;
 
   const fallback = {
     question: `请结合当前「${modelName || "数学模型"}」参数，计算关键量并说明公式来源。`,
-    hint: "先识别题目给出的参数，再选择对应公式。",
+    answer: "根据当前参数代入公式即可得到答案。",
     steps: ["列出已知量", "写出对应公式", "代入参数计算"],
-    answer: "根据当前参数代入公式即可得到答案。"
+    explanation: "先识别题目给出的参数，再选择对应公式。"
   };
 
   const problems = {
     circle: {
-      question: `学校要铺设一个半径为 ${round(radius)} 米的圆形花坛，花坛面积约是多少平方米？`,
-      hint: "圆面积公式是 S = πr²，把半径代入即可。",
-      steps: [`已知 r=${round(radius)}`, "使用 S = πr²", `S≈3.14×${round(radius)}²`],
-      answer: `面积约为 ${round(Math.PI * radius * radius)} 平方米。`
+      question: `一个圆形花坛的半径是 ${round(radius)}${unit}，求它的面积。`,
+      answer: `${round(Math.PI * radius * radius)}平方${unit}`,
+      steps: [`已知 r=${round(radius)}${unit}`, "圆面积公式：S = πr²", `S≈3.14×${round(radius)}²=${round(Math.PI * radius * radius)}平方${unit}`],
+      explanation: "圆面积和半径的平方有关，把半径代入公式即可。"
     },
     triangle: {
-      question: `一块三角形展示牌的底为 ${round(base)} 米，高为 ${round(height)} 米，它的面积是多少平方米？`,
-      hint: "三角形面积等于底乘高再除以 2。",
+      question: `一个三角形的底边长为 ${round(base)}${unit}，高为 ${round(height)}${unit}，求这个三角形的面积。`,
+      answer: `${round((base * height) / 2)}平方${unit}`,
       steps: [
-        `已知 b=${round(base)}，h=${round(height)}`,
-        "使用 S = 1/2 × b × h",
-        `S=1/2×${round(base)}×${round(height)}`
+        `已知 b=${round(base)}${unit}，h=${round(height)}${unit}`,
+        "三角形面积公式：S = b×h÷2",
+        `S=${round(base)}×${round(height)}÷2=${round((base * height) / 2)}平方${unit}`
       ],
-      answer: `面积是 ${round((base * height) / 2)} 平方米。`
+      explanation: "三角形面积等于同底同高长方形面积的一半。"
     },
     parabola: {
-      question: `抛物线 y=${round(a)}(x-${round(h)})²+${round(k)} 表示拱门轮廓，它的顶点和开口方向是什么？`,
-      hint: "顶点式 y=a(x-h)²+k 的顶点是 (h,k)，a 的符号决定开口方向。",
+      question: `已知抛物线 y=${round(a)}(x-${round(h)})²+${round(k)}，当 x=${round(x)} 时，y 的值是多少？`,
+      answer: `${round(a * Math.pow(x - h, 2) + k)}`,
       steps: [
-        "识别顶点式 y=a(x-h)²+k",
-        `读出 h=${round(h)}，k=${round(k)}`,
-        `根据 a=${round(a)} 判断开口方向`
+        `把 x=${round(x)} 代入 y=${round(a)}(x-${round(h)})²+${round(k)}`,
+        `y=${round(a)}×(${round(x)}-${round(h)})²+${round(k)}`,
+        `y=${round(a * Math.pow(x - h, 2) + k)}`
       ],
-      answer: `顶点是 (${round(h)}, ${round(k)})，开口${a >= 0 ? "向上" : "向下"}。`
+      explanation: "先算括号里的差，再平方、乘系数，最后加上 k。"
     },
     sector: {
-      question: `一个扇形草坪半径为 ${round(radius)} 米，圆心角为 ${round(angle)}°，它的弧长约是多少米？`,
-      hint: "扇形弧长是整圆周长按圆心角比例取一部分。",
+      question: `一个扇形半径为 ${round(radius)}${unit}，圆心角为 ${round(angle)}°，求它的弧长。`,
+      answer: `${round((angle / 360) * 2 * Math.PI * radius)}${unit}`,
       steps: [
-        `已知 r=${round(radius)}，θ=${round(angle)}°`,
-        "使用 L = θ/360° × 2πr",
-        `L≈${round(angle)}/360×2×3.14×${round(radius)}`
+        `已知 r=${round(radius)}${unit}，θ=${round(angle)}°`,
+        "弧长公式：L = θ/360° × 2πr",
+        `L≈${round(angle)}/360×2×3.14×${round(radius)}=${round((angle / 360) * 2 * Math.PI * radius)}${unit}`
       ],
-      answer: `弧长约为 ${round((angle / 360) * 2 * Math.PI * radius)} 米。`
+      explanation: "扇形弧长就是整圆周长按圆心角比例取一部分。"
     }
   };
 
@@ -118,10 +128,10 @@ function systemPromptFor(payload) {
       "你是 AI数学学习产品V4 的数学出题引擎。",
       "你必须根据用户给出的数学模型和当前参数生成 1 道中学生应用题。",
       "你必须只返回 JSON，禁止输出 Markdown、解释、代码块或任何多余文字。",
-      "不要把 JSON 包在字符串里，不要添加 question/hint/steps/answer 之外的字段。",
+      "不要把 JSON 包在字符串里，不要添加 question/answer/steps/explanation 之外的字段。",
       "JSON 格式必须严格如下：",
-      '{"question":"题目内容","hint":"解题提示","steps":["步骤1","步骤2","步骤3"],"answer":"最终答案"}',
-      "字段要求：question、hint、answer 必须是字符串；steps 必须是字符串数组，至少 3 项。"
+      '{"question":"题目内容","answer":"最终答案","steps":["步骤1","步骤2","步骤3"],"explanation":"简单讲解"}',
+      "字段要求：question、answer、explanation 必须是字符串；steps 必须是字符串数组，至少 3 项。"
     ].join("\n");
   }
 
@@ -143,17 +153,17 @@ function hasOnlyProblemJsonKeys(parsed) {
 function normalizeStructuredProblemText(aiText) {
   const parsed = JSON.parse(String(aiText || "").trim());
   const question = typeof parsed?.question === "string" ? parsed.question.trim() : "";
-  const hint = typeof parsed?.hint === "string" ? parsed.hint.trim() : "";
+  const answer = typeof parsed?.answer === "string" ? parsed.answer.trim() : "";
   const steps = Array.isArray(parsed?.steps)
     ? parsed.steps.map((step) => (typeof step === "string" ? step.trim() : "")).filter(Boolean)
     : [];
-  const answer = typeof parsed?.answer === "string" ? parsed.answer.trim() : "";
+  const explanation = typeof parsed?.explanation === "string" ? parsed.explanation.trim() : "";
   const hasValidShape =
     hasOnlyProblemJsonKeys(parsed) &&
     question &&
-    hint &&
+    answer &&
     steps.length > 0 &&
-    answer;
+    explanation;
 
   if (!hasValidShape) {
     throw new Error("AI返回格式错误，请重试");
@@ -161,9 +171,9 @@ function normalizeStructuredProblemText(aiText) {
 
   return JSON.stringify({
     question,
-    hint,
+    answer,
     steps,
-    answer
+    explanation
   });
 }
 

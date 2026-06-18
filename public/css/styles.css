@@ -222,7 +222,7 @@ h2 {
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
   grid-template-areas:
     "visual controls"
-    "ai exercise"
+    "ai ai"
     "practice practice"
     "ask ask";
   gap: 16px;
@@ -242,10 +242,6 @@ h2 {
 
 .ai-card {
   grid-area: ai;
-}
-
-.exercise-card {
-  grid-area: exercise;
 }
 
 .practice-card {
@@ -566,7 +562,6 @@ a:focus-visible {
       "visual"
       "controls"
       "ai"
-      "exercise"
       "practice"
       "ask";
   }

@@ -314,17 +314,16 @@
     const { wrap, stage, controls, result } = buildShell(
       model,
       "同类项合并实验台",
-      "先按同类项归类，再分别合并；x² 项、x 项和常数项不能混在一起合并。"
+      "把颜色相同、字母和指数都相同的项合并；x² 项、x 项和常数项不能混合合并。"
     );
 
     stage.classList.add("like-term-stage");
-    const expressionBox = createEl("div", "expression-focus");
-    const legend = createEl("div", "like-term-legend");
-    const groupBoard = createEl("div", "like-term-groups");
-    stage.append(expressionBox, legend, groupBoard);
+    const expressionBox = createEl("div", "expression-focus compact-expression");
+    const colorHint = createEl("p", "term-color-hint", "蓝色是 x 项，橙色是常数项。");
+    stage.append(expressionBox, colorHint);
 
     const stepButtons = [
-      makeButton("第一步：识别同类项", () => {
+      makeButton("第一步：找同类项", () => {
         step = 1;
         draw();
       }),
@@ -354,12 +353,24 @@
       return exampleQueue.shift();
     }
 
-    function termCard(term) {
+    function termBadge(term) {
       const className = term.variable
-        ? `like-term-card variable-term${term.power === 2 ? " square-term" : ""}${term.coef < 0 ? " negative" : ""}`
-        : `like-term-card constant-term${term.coef < 0 ? " negative" : ""}`;
-      const label = !term.variable && term.coef > 0 ? `+${term.coef}` : formatTerm(term, true);
-      return createEl("span", className, label);
+        ? `term-badge term-variable${term.power === 2 ? " term-square" : ""}${term.coef < 0 ? " negative" : ""}`
+        : `term-badge term-constant${term.coef < 0 ? " negative" : ""}`;
+      return createEl("span", className, formatTerm(term, true));
+    }
+
+    function renderExpression(terms) {
+      expressionBox.replaceChildren();
+      const label = createEl("strong", "", "原式");
+      const line = createEl("div", "colored-expression");
+      terms.forEach((term, termIndex) => {
+        if (termIndex > 0 || term.coef < 0) {
+          line.appendChild(createEl("span", "expression-operator", term.coef < 0 ? "-" : "+"));
+        }
+        line.appendChild(termBadge({ ...term, coef: Math.abs(term.coef) }));
+      });
+      expressionBox.append(label, line);
     }
 
     function groupedExpression(groups) {
@@ -387,22 +398,9 @@
       const grouped = groupedExpression(groups);
       const combined = combineTerms(terms);
 
-      expressionBox.innerHTML = `<strong>原式：</strong><span>${original}</span>`;
-      legend.replaceChildren(
-        createEl("span", "legend-chip variable-term", "蓝色表示含字母的同类项"),
-        createEl("span", "legend-chip constant-term", "橙色表示常数项"),
-        createEl("span", "legend-note", "只有同类项之间才能合并")
-      );
-
-      groupBoard.replaceChildren();
-      groups.forEach((group) => {
-        const groupEl = createEl("div", "like-term-group");
-        groupEl.appendChild(createEl("h4", "", group.label));
-        const cards = createEl("div", "like-term-card-row");
-        group.terms.forEach((term) => cards.appendChild(termCard(term)));
-        groupEl.appendChild(cards);
-        groupBoard.appendChild(groupEl);
-      });
+      renderExpression(terms);
+      const hasSquare = terms.some((term) => term.power === 2);
+      colorHint.textContent = hasSquare ? "浅蓝是 x² 项，蓝色是 x 项，橙色是常数项。" : "蓝色是 x 项，橙色是常数项。";
 
       stepButtons.forEach((button, buttonIndex) => {
         button.classList.toggle("is-active", buttonIndex === step - 1);
@@ -412,16 +410,16 @@
       const title = createEl("strong", "", step === 0 ? "操作提示" : `第 ${step} 步`);
       const body = createEl("div", "step-explanation");
       if (step === 0) {
-        body.appendChild(createEl("p", "", "点击步骤按钮，观察从识别同类项到得到结果的完整过程。"));
+        body.appendChild(createEl("p", "", "把颜色相同的同类项合并。"));
       } else if (step === 1) {
-        body.appendChild(createEl("p", "", `把同类项放在一起：${grouped}`));
-        explanationFor(terms, groups).forEach((text) => body.appendChild(createEl("p", "", text)));
+        body.appendChild(createEl("p", "", `当前过程：${original}`));
+        body.appendChild(createEl("p", "", "先看字母和指数是否完全相同。"));
       } else if (step === 2) {
-        body.appendChild(createEl("p", "", `分别计算：${combined}`));
-        body.appendChild(createEl("p", "", "合并同类项时，只把系数相加，字母和字母指数保持不变。"));
+        body.appendChild(createEl("p", "", `当前过程：${grouped}`));
+        body.appendChild(createEl("p", "", "同类项放在一起，分别合并。"));
       } else {
-        body.appendChild(createEl("p", "", `最终结果：${original} = ${combined}`));
-        body.appendChild(createEl("p", "", "先归类，再合并；不同类的项保留下来，不能硬凑在一起。"));
+        body.appendChild(createEl("p", "", `当前过程：${combined}`));
+        body.appendChild(createEl("p", "", `结果：${original} = ${combined}`));
       }
       result.append(title, body);
     }
@@ -585,23 +583,17 @@
     );
     stage.append(equationFocus, balance, legend);
 
-    const constantButton = makeButton("", () => {
+    const actionButton = makeButton("", () => {
       if (step === 0) {
         step = 1;
         errorMessage = "";
         draw();
-      }
-    });
-    const divideButton = makeButton("", () => {
-      if (step < 1) {
-        errorMessage = "请先消去常数项。等式两边必须进行相同操作，不能只处理一边。";
-        balance.classList.add("is-tilted");
-        draw();
-        window.setTimeout(() => balance.classList.remove("is-tilted"), 700);
         return;
       }
-      step = 2;
-      errorMessage = "";
+      if (step === 1) {
+        step = 2;
+        errorMessage = "";
+      }
       draw();
     });
     const backButton = makeButton("上一步", () => {
@@ -623,7 +615,7 @@
       errorMessage = "";
       draw();
     });
-    controls.append(constantButton, divideButton, backButton, resetButton, changeButton);
+    controls.append(actionButton, backButton, changeButton, resetButton);
 
     function addBlocks(target, xCount, unitCount) {
       target.replaceChildren();
@@ -706,8 +698,12 @@
       const eq = equations[index];
       const state = currentState(eq);
       equationFocus.innerHTML = `<strong>当前方程：</strong><span>${state.equation}</span>`;
-      constantButton.textContent = eq.b > 0 ? `两边同时减 ${eq.b}` : `两边同时加 ${Math.abs(eq.b)}`;
-      divideButton.textContent = `两边同时除以 ${eq.a}`;
+      actionButton.textContent = step === 0
+        ? (eq.b > 0 ? `下一步：两边同时减 ${eq.b}` : `下一步：两边同时加 ${Math.abs(eq.b)}`)
+        : step === 1
+          ? `下一步：两边同时除以 ${eq.a}`
+          : "已完成";
+      actionButton.disabled = step === 2;
       addBlocks(leftPan, state.leftX, state.leftUnits);
       addBlocks(rightPan, 0, state.rightUnits);
       leftPan.insertBefore(createEl("strong", "pan-label", `左托盘：${state.leftLabel}`), leftPan.firstChild);
@@ -1349,12 +1345,11 @@
       result.innerHTML = `<strong>实时结果</strong><p>${text}</p>`;
     }
 
-    const modeButtons = modes.map((label, index) => makeButton(label, () => {
-      modeIndex = index;
-      setActiveButton(modeButtons, index);
+    const switchModeButton = makeButton("", () => {
+      modeIndex = (modeIndex + 1) % modes.length;
       draw();
-    }));
-    addButtonGroup(controls, modeButtons);
+    });
+    controls.appendChild(switchModeButton);
     controls.appendChild(makeRange("线段长度 / 线宽", 3, 9, 1, length, (value) => {
       length = value;
       draw();
@@ -1367,10 +1362,13 @@
       modeIndex = 2;
       length = 7;
       angle = 60;
-      setActiveButton(modeButtons, modeIndex);
       draw();
     }));
-    setActiveButton(modeButtons, modeIndex);
+    const originalDraw = draw;
+    draw = function drawWithModeButton() {
+      switchModeButton.textContent = `切换图形：${modes[modeIndex]}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }
@@ -1385,7 +1383,6 @@
       { label: "π", value: Math.PI, category: "无理数", note: "π 是无限不循环小数，是无理数。" },
       { label: "√9", value: 3, category: "自然数", note: "√9=3，所以它属于自然数。" }
     ];
-    const categories = ["自然数", "整数", "有理数", "无理数", "实数"];
     let cardIndex = 0;
     const { wrap, stage, controls, result } = buildShell(
       model,
@@ -1410,11 +1407,10 @@
       result.innerHTML = `<strong>实时结果</strong><p>${message}</p><p>${item.note}</p>`;
     }
 
-    addButtonGroup(controls, categories.map((category) => makeButton(category, () => {
+    controls.appendChild(makeButton("判断分类", () => {
       const item = cards[cardIndex];
-      const ok = category === item.category || category === "实数";
-      draw(ok ? `判断正确：${item.label} 可以归入“${category}”。` : `再想一想：${item.label} 最贴切的分类是“${item.category}”。`);
-    })));
+      draw(`${item.label} 最贴切的分类是“${item.category}”，也属于实数。`);
+    }));
     controls.appendChild(makeButton("换一张数字卡片", () => {
       cardIndex = (cardIndex + 1) % cards.length;
       draw();
@@ -1469,21 +1465,12 @@
       result.innerHTML = `<strong>${method === "add" ? "加减消元" : "代入消元"}</strong><p>${steps[Math.min(step, 2)]}</p><p>方程组的解是 x=4，y=3；图像上就是两条直线的交点。</p>`;
     }
 
-    const methodButtons = [
-      makeButton("加减消元", () => {
-        method = "add";
-        step = 0;
-        setActiveButton(methodButtons, 0);
-        draw();
-      }),
-      makeButton("代入消元", () => {
-        method = "substitute";
-        step = 0;
-        setActiveButton(methodButtons, 1);
-        draw();
-      })
-    ];
-    addButtonGroup(controls, methodButtons);
+    const switchMethodButton = makeButton("", () => {
+      method = method === "add" ? "substitute" : "add";
+      step = 0;
+      draw();
+    });
+    controls.appendChild(switchMethodButton);
     controls.appendChild(makeButton("下一步", () => {
       step = Math.min(2, step + 1);
       draw();
@@ -1495,10 +1482,13 @@
     controls.appendChild(makeButton("重置", () => {
       step = 0;
       method = "add";
-      setActiveButton(methodButtons, 0);
       draw();
     }));
-    setActiveButton(methodButtons, 0);
+    const originalDraw = draw;
+    draw = function drawWithMethodButton() {
+      switchMethodButton.textContent = `切换方法：${method === "add" ? "加减消元" : "代入消元"}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }
@@ -1610,32 +1600,26 @@
       result.innerHTML = `<strong>实时结果</strong><p>${surveyMode}：共 ${total} 人。扇形图圆心角 = 某项人数 ÷ 总人数 × 360°。</p>`;
     }
 
-    labels.forEach((label, index) => {
-      controls.appendChild(makeRange(`${label}人数`, 1, 20, 1, values[index], (value) => {
-        values[index] = value;
-        draw();
-      }));
+    controls.appendChild(makeButton("随机调整一项", () => {
+      const index = Math.floor(Math.random() * values.length);
+      values[index] = Math.floor(Math.random() * 16) + 4;
+      draw();
+    }));
+    const switchSurveyButton = makeButton("", () => {
+      surveyMode = surveyMode === "全面调查" ? "抽样调查" : "全面调查";
+      draw();
     });
-    const modeButtons = [
-      makeButton("全面调查", () => {
-        surveyMode = "全面调查";
-        setActiveButton(modeButtons, 0);
-        draw();
-      }),
-      makeButton("抽样调查", () => {
-        surveyMode = "抽样调查";
-        setActiveButton(modeButtons, 1);
-        draw();
-      })
-    ];
-    addButtonGroup(controls, modeButtons);
+    controls.appendChild(switchSurveyButton);
     controls.appendChild(makeButton("重置", () => {
       values = [12, 9, 7, 4];
       surveyMode = "全面调查";
-      setActiveButton(modeButtons, 0);
       draw();
     }));
-    setActiveButton(modeButtons, 0);
+    const originalDraw = draw;
+    draw = function drawWithSurveyButton() {
+      switchSurveyButton.textContent = `切换方式：${surveyMode}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }
@@ -1673,12 +1657,11 @@
       result.innerHTML = `<strong>${condition.key}</strong><p>${condition.meaning}。</p><p>${satisfied ? "满足该条件时，两个三角形可以通过平移、旋转或翻折重合，所以全等。" : condition.missing}</p>`;
     }
 
-    const conditionButtons = conditions.map((condition, buttonIndex) => makeButton(condition.key, () => {
-      index = buttonIndex;
-      setActiveButton(conditionButtons, buttonIndex);
+    const switchConditionButton = makeButton("", () => {
+      index = (index + 1) % conditions.length;
       draw();
-    }));
-    addButtonGroup(controls, conditionButtons);
+    });
+    controls.appendChild(switchConditionButton);
     controls.appendChild(makeButton("切换满足/缺少条件", () => {
       satisfied = !satisfied;
       draw();
@@ -1686,10 +1669,13 @@
     controls.appendChild(makeButton("重置", () => {
       index = 0;
       satisfied = true;
-      setActiveButton(conditionButtons, 0);
       draw();
     }));
-    setActiveButton(conditionButtons, 0);
+    const originalDraw = draw;
+    draw = function drawWithConditionButton() {
+      switchConditionButton.textContent = `切换判定：${conditions[index].key}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }
@@ -1743,12 +1729,11 @@
       result.innerHTML = `<strong>实时结果</strong><p>当前：${axes[axisIndex]}。A 与 A' 到对称轴距离相等，对称轴是 AA' 的垂直平分线。</p>`;
     }
 
-    const axisButtons = axes.map((label, buttonIndex) => makeButton(label, () => {
-      axisIndex = buttonIndex;
-      setActiveButton(axisButtons, buttonIndex);
+    const switchAxisButton = makeButton("", () => {
+      axisIndex = (axisIndex + 1) % axes.length;
       draw();
-    }));
-    addButtonGroup(controls, axisButtons);
+    });
+    controls.appendChild(switchAxisButton);
     controls.appendChild(makeRange("横向距离", 1, 5, 1, x, (value) => {
       x = value;
       draw();
@@ -1760,7 +1745,11 @@
     controls.appendChild(makeButton("找出对称点", () => {
       result.innerHTML += "<p>练习：先从原点向对称轴作垂线，再在另一侧取相同距离，就是对称点。</p>";
     }));
-    setActiveButton(axisButtons, 0);
+    const originalDraw = draw;
+    draw = function drawWithAxisButton() {
+      switchAxisButton.textContent = `切换对称轴：${axes[axisIndex]}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }
@@ -1900,12 +1889,11 @@
       result.innerHTML = `<strong>${mode.label}</strong><p>${formula}</p><p>${mode.sign === "difference" ? "平方差可以看成大正方形去掉小正方形。" : "两个 ab 区域说明中间项为什么是 2ab。"}</p>`;
     }
 
-    const modeButtons = modes.map((mode, index) => makeButton(mode.label, () => {
-      modeIndex = index;
-      setActiveButton(modeButtons, index);
+    const switchFormulaButton = makeButton("", () => {
+      modeIndex = (modeIndex + 1) % modes.length;
       draw();
-    }));
-    addButtonGroup(controls, modeButtons);
+    });
+    controls.appendChild(switchFormulaButton);
     controls.appendChild(makeRange("a", 3, 9, 1, a, (value) => {
       a = value;
       b = Math.min(b, a - 1);
@@ -1919,10 +1907,13 @@
       a = 5;
       b = 2;
       modeIndex = 0;
-      setActiveButton(modeButtons, 0);
       draw();
     }));
-    setActiveButton(modeButtons, 0);
+    const originalDraw = draw;
+    draw = function drawWithFormulaButton() {
+      switchFormulaButton.textContent = `切换公式：${modes[modeIndex].label}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }
@@ -2035,24 +2026,13 @@
       }
     }
 
-    const modeButtons = [
-      makeButton("约分", () => {
-        mode = "simplify";
-        setActiveButton(modeButtons, 0);
-        draw();
-      }),
-      makeButton("通分", () => {
-        mode = "common";
-        setActiveButton(modeButtons, 1);
-        draw();
-      }),
-      makeButton("分式加减", () => {
-        mode = "add";
-        setActiveButton(modeButtons, 2);
-        draw();
-      })
-    ];
-    addButtonGroup(controls, modeButtons);
+    const modes = ["simplify", "common", "add"];
+    const modeNames = { simplify: "约分", common: "通分", add: "分式加减" };
+    const switchModeButton = makeButton("", () => {
+      mode = modes[(modes.indexOf(mode) + 1) % modes.length];
+      draw();
+    });
+    controls.appendChild(switchModeButton);
     controls.appendChild(makeRange("分子", 1, 12, 1, numerator, (value) => {
       numerator = value;
       draw();
@@ -2061,8 +2041,9 @@
       denominator = value;
       draw();
     }));
-    controls.appendChild(makeRange("另一个分母", 2, 16, 1, otherDenominator, (value) => {
-      otherDenominator = value;
+    controls.appendChild(makeButton("换另一个分母", () => {
+      const options = [6, 8, 10, 12, 15, 16];
+      otherDenominator = options[(options.indexOf(otherDenominator) + 1) % options.length] || 12;
       draw();
     }));
     controls.appendChild(makeButton("重置", () => {
@@ -2070,10 +2051,13 @@
       denominator = 8;
       otherDenominator = 12;
       mode = "simplify";
-      setActiveButton(modeButtons, 0);
       draw();
     }));
-    setActiveButton(modeButtons, 0);
+    const originalDraw = draw;
+    draw = function drawWithModeButton() {
+      switchModeButton.textContent = `切换任务：${modeNames[mode]}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }
@@ -2182,8 +2166,8 @@
       height = value;
       draw();
     }));
-    controls.appendChild(makeRange("倾斜程度", 0, 4, 1, shear, (value) => {
-      shear = value;
+    controls.appendChild(makeButton("改变倾斜", () => {
+      shear = (shear + 1) % 5;
       draw();
     }));
     controls.appendChild(makeButton("演示剪拼", () => {
@@ -2636,21 +2620,25 @@
       result.innerHTML = `<strong>${views[view].label}</strong><p>${views[view].shape}。</p><p>练习：先想象眼睛站在哪个方向，再把看到的面画成平面图。</p>`;
     }
 
-    const buttons = Object.entries(views).map(([key, item], index) => makeButton(item.label, () => {
-      view = key;
-      setActiveButton(buttons, index);
+    const viewKeys = Object.keys(views);
+    const switchViewButton = makeButton("", () => {
+      const currentIndex = viewKeys.indexOf(view);
+      view = viewKeys[(currentIndex + 1) % viewKeys.length];
       draw();
-    }));
-    addButtonGroup(controls, buttons);
+    });
+    controls.appendChild(switchViewButton);
     controls.appendChild(makeButton("选择正确视图", () => {
       result.innerHTML += "<p>如果从正前方看，只能看到物体的长和高，这就是主视图。</p>";
     }));
     controls.appendChild(makeButton("重置", () => {
       view = "front";
-      setActiveButton(buttons, 0);
       draw();
     }));
-    setActiveButton(buttons, 0);
+    const originalDraw = draw;
+    draw = function drawWithViewButton() {
+      switchViewButton.textContent = `切换视图：${views[view].label}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }
@@ -2708,14 +2696,13 @@
       result.innerHTML = `<strong>${modes[modeIndex]}</strong><p>理论概率≈${round(p)}；实验 ${trials} 次，目标结果 ${success} 次，实验频率≈${round(frequency)}。</p>`;
     }
 
-    const modeButtons = modes.map((label, index) => makeButton(label, () => {
-      modeIndex = index;
+    const switchModeButton = makeButton("", () => {
+      modeIndex = (modeIndex + 1) % modes.length;
       trials = 0;
       success = 0;
-      setActiveButton(modeButtons, index);
       draw();
-    }));
-    addButtonGroup(controls, modeButtons);
+    });
+    controls.appendChild(switchModeButton);
     controls.appendChild(makeRange("红球 / 红色区域", 1, 10, 1, red, (value) => {
       red = value;
       trials = 0;
@@ -2730,7 +2717,6 @@
     }));
     addButtonGroup(controls, [
       makeButton("模拟 1 次", () => simulate(1)),
-      makeButton("模拟 10 次", () => simulate(10)),
       makeButton("模拟 100 次", () => simulate(100)),
       makeButton("重置", () => {
         trials = 0;
@@ -2738,7 +2724,11 @@
         draw();
       })
     ]);
-    setActiveButton(modeButtons, 0);
+    const originalDraw = draw;
+    draw = function drawWithModeButton() {
+      switchModeButton.textContent = `切换实验：${modes[modeIndex]}`;
+      originalDraw();
+    };
     draw();
     container.appendChild(wrap);
   }

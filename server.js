@@ -23,7 +23,11 @@ function getAiSettings() {
 }
 
 function isDeepSeekGradingEnabled() {
-  return String(process.env.ENABLE_DEEPSEEK_GRADING || "").toLowerCase() === "true";
+  const flag = String(process.env.ENABLE_DEEPSEEK_GRADING || "").toLowerCase();
+  if (["false", "0", "off", "no"].includes(flag)) {
+    return false;
+  }
+  return Boolean(process.env.DEEPSEEK_API_KEY);
 }
 
 function getDeepSeekGradingSettings() {

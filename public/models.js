@@ -1116,10 +1116,75 @@
     }
   }
 
+  const customInteractiveTemplates = {
+    "rational-number": "number-line",
+    "polynomial-add-sub": "algebra-tiles",
+    "linear-equation-one": "equation-balance",
+    "basic-geometry": "angle-lines",
+    "real-number": "number-line",
+    "linear-equations-two": "equation-balance",
+    inequality: "number-line",
+    "data-collection": "data-chart",
+    "congruent-triangle": "triangle-ratio",
+    symmetry: "symmetry-mirror",
+    "isosceles-triangle": "shape-area",
+    "polynomial-multiply": "algebra-tiles",
+    "multiplication-formula": "algebra-tiles",
+    factorization: "algebra-tiles",
+    "fraction-expression": "fraction-bars",
+    "quadratic-radical": "fraction-bars",
+    parallelogram: "shape-area",
+    rectangle: "shape-area",
+    rhombus: "shape-area",
+    square: "shape-area",
+    "data-analysis": "data-chart",
+    "quadratic-equation": "function-mini-graph",
+    "inverse-function": "function-mini-graph",
+    "similar-triangle": "triangle-ratio",
+    trigonometry: "triangle-ratio",
+    "projection-view": "view-3d",
+    probability: "probability-simulator"
+  };
+
+  const interactiveDescriptions = {
+    "number-line": "拖动数轴上的数，观察大小、绝对值和区间变化。",
+    "equation-balance": "拖动未知数取值，观察方程两边是否平衡。",
+    "algebra-tiles": "点击生成表达式，用代数块观察合并与面积关系。",
+    "fraction-bars": "拖动分子分母或根式参数，观察等值与化简过程。",
+    "angle-lines": "拖动角度滑块，观察角、射线和直线的变化。",
+    "symmetry-mirror": "拖动左侧点，观察它关于对称轴的镜像点。",
+    "shape-area": "拖动图形参数，观察面积、周长和形状关系。",
+    "data-chart": "生成一组数据，观察统计量和柱状图变化。",
+    "probability-simulator": "调整红球白球数量，模拟随机摸球并观察频率。",
+    "function-mini-graph": "拖动函数参数，观察图像和关键点变化。",
+    "triangle-ratio": "拖动比例或角度，观察三角形对应关系。",
+    "view-3d": "切换观察方向，理解立体图形的三视图。"
+  };
+
   models.forEach((model) => {
     if (!model.geoGebra) {
       model.geoGebra = { enabled: false };
     }
+
+    if (model.geoGebra.enabled) {
+      model.interactive = {
+        enabled: true,
+        type: "geogebra",
+        template: model.geoGebra.construction || model.id,
+        title: "互动探索",
+        description: model.geoGebra.description || "拖动参数，观察图形与公式变化。"
+      };
+      return;
+    }
+
+    const template = customInteractiveTemplates[model.id];
+    model.interactive = {
+      enabled: Boolean(template),
+      type: template ? "custom" : "placeholder",
+      template: template || "placeholder",
+      title: "互动探索",
+      description: interactiveDescriptions[template] || "通过互动卡片观察这个知识点的核心变化。"
+    };
   });
 
   window.MathCoursewareModels = {

@@ -13,10 +13,11 @@
   const metaLine = document.getElementById("modelMetaLine");
   const description = document.getElementById("modelDescription");
   const overviewPanel = document.getElementById("overviewPanel");
-  const geogebraSection = document.getElementById("geogebra-section");
-  const geogebraDescription = document.getElementById("geogebra-description");
-  const geogebraContainer = document.getElementById("geogebra-container");
-  const geogebraFallback = document.getElementById("geogebra-fallback");
+  const interactiveSection = document.getElementById("interactive-section");
+  const interactiveTitle = document.getElementById("interactive-title");
+  const interactiveDescription = document.getElementById("interactive-description");
+  const interactiveContainer = document.getElementById("interactive-container");
+  const interactiveFallback = document.getElementById("interactive-fallback");
   const sliders = document.getElementById("sliderPanel");
   const metrics = document.getElementById("metricPanel");
   const askForm = document.getElementById("askForm");
@@ -46,7 +47,7 @@
     metrics.innerHTML = "";
     askForm.hidden = true;
     gradeForm.hidden = true;
-    geogebraSection.hidden = true;
+    interactiveSection.hidden = true;
     resultCard.hidden = false;
     gradeResult.hidden = false;
     gradeResult.className = "grade-result-card is-wrong";
@@ -428,50 +429,57 @@
     }
   };
 
-  function showGeoGebraFallback(message) {
-    geogebraContainer.replaceChildren();
-    geogebraContainer.hidden = true;
-    geogebraFallback.hidden = false;
-    geogebraFallback.textContent = message;
+  function showInteractiveFallback(message) {
+    interactiveContainer.replaceChildren();
+    interactiveContainer.hidden = true;
+    interactiveFallback.hidden = false;
+    interactiveFallback.replaceChildren();
+
+    const fallback = document.createElement("div");
+    fallback.className = "interactive-placeholder";
+    fallback.innerHTML = `
+      <strong>互动内容准备中</strong>
+      <span>${message}</span>
+    `;
+    interactiveFallback.appendChild(fallback);
   }
 
-  function renderGeoGebra() {
-    const config = model.geoGebra || { enabled: false };
-    geogebraDescription.textContent = config.description || "拖动点、滑块或参数，观察图形和公式变化。";
+  function renderGeoGebra(config) {
+    const geoConfig = model.geoGebra || config.geoGebra || { enabled: false };
 
-    if (!config.enabled) {
-      showGeoGebraFallback("该知识点暂未提供互动图示，后续将补充。");
+    if (!geoConfig.enabled) {
+      showInteractiveFallback("这个知识点会先展示轻量互动组件，帮助你观察规律。");
       return;
     }
 
-    geogebraContainer.hidden = false;
-    geogebraFallback.hidden = true;
-    geogebraFallback.textContent = "";
-    geogebraContainer.replaceChildren();
-    geogebraContainer.style.minHeight = `${config.height || 420}px`;
+    interactiveContainer.hidden = false;
+    interactiveFallback.hidden = true;
+    interactiveFallback.replaceChildren();
+    interactiveContainer.replaceChildren();
+    interactiveContainer.style.minHeight = `${geoConfig.height || 420}px`;
 
-    if (config.embedType === "iframe" && config.materialId) {
+    if (geoConfig.embedType === "iframe" && geoConfig.materialId) {
       const iframe = document.createElement("iframe");
       iframe.title = `${model.title} GeoGebra 互动图示`;
       iframe.loading = "lazy";
       iframe.allowFullscreen = true;
-      iframe.height = String(config.height || 420);
-      iframe.src = `https://www.geogebra.org/material/iframe/id/${encodeURIComponent(config.materialId)}/width/900/height/${config.height || 420}/border/888/sfsb/true/smb/false/stb/false/stbh/false/ai/false/asb/false/sri/true/rc/false/ld/false/sdz/true/ctl/false`;
-      geogebraContainer.appendChild(iframe);
+      iframe.height = String(geoConfig.height || 420);
+      iframe.src = `https://www.geogebra.org/material/iframe/id/${encodeURIComponent(geoConfig.materialId)}/width/900/height/${geoConfig.height || 420}/border/888/sfsb/true/smb/false/stb/false/stbh/false/ai/false/asb/false/sri/true/rc/false/ld/false/sdz/true/ctl/false`;
+      interactiveContainer.appendChild(iframe);
       return;
     }
 
     if (typeof window.GGBApplet !== "function") {
-      showGeoGebraFallback("GeoGebra 暂时无法加载，请稍后刷新页面。");
+      showInteractiveFallback("GeoGebra 暂时无法加载，请稍后刷新页面。");
       return;
     }
 
     const appletId = `ggb_${model.id.replace(/[^a-z0-9]/gi, "_")}`;
     const params = {
       id: appletId,
-      appName: config.appName || "geometry",
-      width: geogebraContainer.clientWidth || 900,
-      height: config.height || 420,
+      appName: geoConfig.appName || "geometry",
+      width: interactiveContainer.clientWidth || 900,
+      height: geoConfig.height || 420,
       showToolBar: false,
       showAlgebraInput: false,
       showMenuBar: false,
@@ -480,9 +488,9 @@
       enableShiftDragZoom: true,
       useBrowserForJS: true,
       borderColor: "#cfe0f5",
-      scaleContainerClass: "geogebra-container",
+      scaleContainerClass: "interactive-container",
       appletOnLoad(api) {
-        const construction = geoGebraConstructions[config.construction || model.id];
+        const construction = geoGebraConstructions[geoConfig.construction || model.id];
         if (construction) {
           construction(api);
         }
@@ -491,10 +499,60 @@
 
     try {
       const applet = new window.GGBApplet(params, true);
-      applet.inject("geogebra-container");
+      applet.inject("interactive-container");
     } catch (error) {
-      showGeoGebraFallback("GeoGebra 互动图示加载失败，请稍后重试。");
+      showInteractiveFallback("GeoGebra 互动图示加载失败，请稍后重试。");
     }
+  }
+
+  function renderCustomInteractive(config) {
+    interactiveContainer.hidden = false;
+    interactiveFallback.hidden = true;
+    interactiveFallback.replaceChildren();
+    interactiveContainer.replaceChildren();
+    interactiveContainer.style.minHeight = "";
+
+    if (!window.CustomInteractives || typeof window.CustomInteractives.renderCustomInteractive !== "function") {
+      showInteractiveFallback("轻量互动组件暂时无法加载，请刷新页面后重试。");
+      return;
+    }
+
+    window.CustomInteractives.renderCustomInteractive(
+      {
+        ...model,
+        interactive: config
+      },
+      interactiveContainer
+    );
+  }
+
+  function renderInteractive() {
+    const config = model.interactive || {
+      enabled: false,
+      type: "placeholder",
+      title: "互动探索",
+      description: "拖动参数，观察变化。"
+    };
+
+    interactiveTitle.textContent = config.title || "互动探索";
+    interactiveDescription.textContent = config.description || "拖动参数，观察变化。";
+
+    if (!config.enabled) {
+      showInteractiveFallback("这个知识点的互动组件正在设计中。");
+      return;
+    }
+
+    if (config.type === "geogebra") {
+      renderGeoGebra(config);
+      return;
+    }
+
+    if (config.type === "custom") {
+      renderCustomInteractive(config);
+      return;
+    }
+
+    showInteractiveFallback("这个知识点的互动组件正在设计中。");
   }
 
   function statsStorageKey() {
@@ -1025,7 +1083,7 @@
 
   buildSliders();
   renderAll();
-  renderGeoGebra();
+  renderInteractive();
   updateStatsPanel();
   updateMistakeCount();
 })();

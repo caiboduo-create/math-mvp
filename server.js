@@ -13,6 +13,32 @@ const publicDir = path.join(__dirname, "public");
 
 const PORT = Number(process.env.PORT || 3001);
 const LEGACY_PROBLEM_JSON_KEYS = ["question", "answer", "steps", "explanation"];
+const AI_GENERATE_TIMEOUT_MS = 8000;
+
+const CHAPTER_RULES = {
+  "概率初步": {
+    allowedKnowledgePoints: [
+      "随机事件",
+      "必然事件",
+      "不可能事件",
+      "可能事件",
+      "简单概率",
+      "概率",
+      "摸球问题",
+      "抛硬币问题",
+      "掷骰子问题",
+      "抽签问题",
+      "转盘问题",
+      "随机事件 / 概率"
+    ],
+    forbiddenPattern: /相似三角形|相似|锐角三角函数|sin|cos|tan|几何证明|一元二次方程|函数图像|代数化简|面积公式|勾股定理|斜边|直角三角形|几何图形|对应边|比例线段/i,
+    promptLines: [
+      "当前章节是“概率初步”，你只能生成概率初步相关题目。",
+      "允许的知识点包括：随机事件、必然事件、不可能事件、可能事件、简单概率、概率 = 目标结果数 / 所有等可能结果数、摸球问题、抛硬币问题、掷骰子问题、抽签问题、转盘问题。",
+      "禁止生成：相似三角形、锐角三角函数、sin、cos、tan、几何证明、一元二次方程、函数图像、代数化简、面积公式、勾股定理。"
+    ]
+  }
+};
 
 function getAiSettings() {
   const provider = String(process.env.AI_PROVIDER || (process.env.DEEPSEEK_API_KEY ? "deepseek" : "openai")).toLowerCase();
@@ -198,6 +224,128 @@ function randomInt(min, max) {
 
 function choice(items) {
   return items[randomInt(0, items.length - 1)];
+}
+
+function schoolStageFrom(value) {
+  const text = String(value || "");
+  if (text.includes("小学")) return "小学";
+  if (text.includes("初中")) return "初中";
+  return text || "初中";
+}
+
+function buildQuestionContext(body = {}, fallback = {}) {
+  const chapter = String(body.chapter || fallback.chapter || fallback.knowledge || fallback.knowledge_point || body.modelName || "").trim();
+  const grade = String(body.grade || fallback.grade || "").trim();
+  const domain = String(body.domain || fallback.domain || "").trim();
+  const knowledgePoint = String(body.knowledgePoint || fallback.knowledgePoint || fallback.knowledge_point || chapter || "").trim();
+  return {
+    schoolStage: schoolStageFrom(body.schoolStage || fallback.schoolStage || body.stage || ""),
+    subject: String(body.subject || fallback.subject || "数学").trim(),
+    grade,
+    domain,
+    chapter,
+    knowledgePoint,
+    difficulty: Number(body.difficulty || fallback.difficulty || 1),
+    questionType: String(body.questionType || fallback.questionType || fallback.type || "AI自适应出题").trim(),
+    modelId: String(body.modelId || fallback.knowledgeId || "").trim()
+  };
+}
+
+function isProbabilityContext(context) {
+  return context.modelId === "probability" || context.chapter === "概率初步" || context.knowledgePoint.includes("概率");
+}
+
+function probabilityFallbackQuestion(context) {
+  const grade = context.grade || "九年级";
+  const base = {
+    subject: "数学",
+    grade,
+    domain: "统计与概率",
+    chapter: "概率初步",
+    questionType: context.questionType || "基础练习",
+    difficulty: Math.min(5, Math.max(1, Math.round(context.difficulty || 1))),
+    answerType: "number",
+    analysis: "等可能事件的概率 = 目标结果数 ÷ 所有等可能结果数。",
+    explanation: "等可能事件的概率 = 目标结果数 ÷ 所有等可能结果数。",
+    commonMistakes: ["把目标结果数当成分母", "漏数所有等可能结果"],
+    errorTags: ["概率公式", "总数遗漏"],
+    type: context.questionType || "基础练习"
+  };
+  const templates = [
+    {
+      knowledgePoint: "摸球问题",
+      question: "一个袋子里有3个红球、2个白球，随机摸出1个球，摸到红球的概率是多少？",
+      standardAnswer: "3/5",
+      answerValue: 0.6,
+      aliases: ["0.6", "60%"],
+      solutionSteps: ["总球数 = 3 + 2 = 5", "红球有 3 个", "概率 = 3/5"]
+    },
+    {
+      knowledgePoint: "掷骰子问题",
+      question: "掷一个均匀骰子，掷出偶数的概率是多少？",
+      standardAnswer: "1/2",
+      answerValue: 0.5,
+      aliases: ["3/6", "0.5", "50%"],
+      solutionSteps: ["骰子共有 6 个等可能结果", "偶数有 2、4、6，共 3 个", "概率 = 3/6 = 1/2"]
+    },
+    {
+      knowledgePoint: "抛硬币问题",
+      question: "抛一枚均匀硬币，正面朝上的概率是多少？",
+      standardAnswer: "1/2",
+      answerValue: 0.5,
+      aliases: ["0.5", "50%"],
+      solutionSteps: ["硬币有正面、反面 2 个等可能结果", "正面朝上有 1 个目标结果", "概率 = 1/2"]
+    },
+    {
+      knowledgePoint: "简单概率",
+      question: "从1、2、3、4、5中随机抽一个数，抽到奇数的概率是多少？",
+      standardAnswer: "3/5",
+      answerValue: 0.6,
+      aliases: ["0.6", "60%"],
+      solutionSteps: ["共有 5 个等可能结果", "奇数有 1、3、5，共 3 个", "概率 = 3/5"]
+    },
+    {
+      knowledgePoint: "转盘问题",
+      question: "一个转盘被平均分成4份，其中1份是红色，随机转一次，指针落在红色区域的概率是多少？",
+      standardAnswer: "1/4",
+      answerValue: 0.25,
+      aliases: ["0.25", "25%"],
+      solutionSteps: ["转盘平均分成 4 份，所以共有 4 个等可能结果", "红色区域有 1 份", "概率 = 1/4"]
+    }
+  ];
+  const selected = choice(templates);
+  return {
+    ...base,
+    ...selected,
+    answer: selected.standardAnswer,
+    knowledge_point: selected.knowledgePoint,
+    steps: selected.solutionSteps
+  };
+}
+
+function validateGeneratedQuestionForContext(question, context) {
+  if (!question?.question || !question?.answer) {
+    throw new Error("generated question is incomplete");
+  }
+  const rules = CHAPTER_RULES[context.chapter];
+  if (!rules) {
+    return true;
+  }
+
+  const chapter = String(question.chapter || context.chapter || "").trim();
+  const knowledgePoint = String(question.knowledgePoint || question.knowledge_point || "").trim();
+  const questionText = String(question.question || "");
+  if (chapter !== context.chapter) {
+    throw new Error(`chapter mismatch: ${chapter}`);
+  }
+  const allowed = Boolean(knowledgePoint) && rules.allowedKnowledgePoints.some((item) => knowledgePoint === item || knowledgePoint.includes(item) || item.includes(knowledgePoint));
+  if (!allowed) {
+    throw new Error(`knowledge point out of chapter: ${knowledgePoint}`);
+  }
+  if (rules.forbiddenPattern.test(`${questionText} ${knowledgePoint}`)) {
+    throw new Error("generated question contains forbidden topic");
+  }
+  return true;
 }
 
 function formatParabolaFormula(a, h, k) {
@@ -410,7 +558,9 @@ function normalizeGeneratedQuestion(value, fallback = null) {
     ? parsed.analysis.trim()
     : typeof parsed?.explanation === "string"
       ? parsed.explanation.trim()
-      : "";
+      : Array.isArray(parsed?.solutionSteps)
+        ? parsed.solutionSteps.map((item) => String(item || "").trim()).filter(Boolean).join(" ")
+        : "";
   const knowledgePoint = typeof parsed?.knowledge_point === "string" && parsed.knowledge_point.trim()
     ? parsed.knowledge_point.trim()
     : Array.isArray(parsed?.knowledgePoints) && parsed.knowledgePoints[0]
@@ -436,8 +586,20 @@ function normalizeGeneratedQuestion(value, fallback = null) {
   }
 
   return normalizeSignedSemanticQuestion({
+    subject: typeof parsed?.subject === "string" && parsed.subject.trim() ? parsed.subject.trim() : fallback?.subject,
+    schoolStage: typeof parsed?.schoolStage === "string" && parsed.schoolStage.trim() ? parsed.schoolStage.trim() : fallback?.schoolStage,
+    grade: typeof parsed?.grade === "string" && parsed.grade.trim() ? parsed.grade.trim() : fallback?.grade,
+    domain: typeof parsed?.domain === "string" && parsed.domain.trim() ? parsed.domain.trim() : fallback?.domain,
+    chapter: typeof parsed?.chapter === "string" && parsed.chapter.trim() ? parsed.chapter.trim() : fallback?.chapter,
+    knowledgePoint: typeof parsed?.knowledgePoint === "string" && parsed.knowledgePoint.trim()
+      ? parsed.knowledgePoint.trim()
+      : knowledgePoint,
+    questionType: typeof parsed?.questionType === "string" && parsed.questionType.trim()
+      ? parsed.questionType.trim()
+      : fallback?.questionType,
     question,
     answer,
+    standardAnswer: answer,
     answerValue: Number.isFinite(numericAnswerValue) ? numericAnswerValue : undefined,
     aliases,
     steps: steps.length > 0 ? steps : [analysis],
@@ -467,6 +629,15 @@ function normalizeGeneratedQuestion(value, fallback = null) {
 
 function fallbackQuestionFromBody(body) {
   try {
+    const context = buildQuestionContext(body, body?.localQuestion || {});
+    if (isProbabilityContext(context)) {
+      return normalizeGeneratedQuestion(probabilityFallbackQuestion(context), {
+        ...(body?.localQuestion || {}),
+        chapter: "概率初步",
+        domain: "统计与概率",
+        knowledge_point: "简单概率"
+      });
+    }
     return normalizeGeneratedQuestion(body?.localQuestion, {
       steps: body?.localQuestion?.steps || []
     });
@@ -676,7 +847,8 @@ async function callAiJson(systemPrompt, payload, options = {}) {
     return null;
   }
   const settings = getAiSettings();
-  const completion = await client.chat.completions.create({
+  const requestOptions = options.timeout_ms ? { timeout: options.timeout_ms } : undefined;
+  const request = client.chat.completions.create({
     model: settings.model,
     messages: [
       { role: "system", content: systemPrompt },
@@ -685,7 +857,15 @@ async function callAiJson(systemPrompt, payload, options = {}) {
     response_format: { type: "json_object" },
     max_tokens: options.max_tokens || 650,
     temperature: options.temperature ?? 0.45
-  });
+  }, requestOptions);
+  const completion = options.timeout_ms
+    ? await Promise.race([
+        request,
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("AI request timed out")), options.timeout_ms);
+        })
+      ])
+    : await request;
 
   const content = completion.choices?.[0]?.message?.content || "";
   return JSON.parse(content);
@@ -758,7 +938,13 @@ async function handleAsk(req, res) {
 async function handleGenerateQuestion(req, res) {
   const body = req.body || {};
   const fallback = fallbackQuestionFromBody(body);
+  const context = buildQuestionContext(body, fallback);
   const client = createAiClient();
+
+  if (body.mode !== "ai_generate") {
+    res.status(200).json(fallback);
+    return;
+  }
 
   if (!client) {
     res.status(200).json(fallback);
@@ -779,17 +965,24 @@ async function handleGenerateQuestion(req, res) {
       "允许加入一个温和的易错点干扰，例如单位、符号、是否除以2、总数与目标数，但不能故意出偏题或过难题。",
       "如果题目涉及正负数生活语境，尤其是水下、海拔、温度，answer 必须同时包含“数值结果”和“语义结果”，例如：数值结果：-20；语义结果：水下20米。",
       "禁止只输出“-20米”这类没有生活语义的答案；analysis 必须把负号或正号翻译成自然语言，并检查是否存在符号结果与生活语义冲突。",
+      "题目必须严格符合输入里的 schoolStage、subject、grade、domain、chapter、knowledgePoint。当前页面是什么章节，就只能出这个章节的题，绝对不能跨章节。",
+      "返回 JSON 中的 subject、grade、domain、chapter、knowledgePoint、questionType 必须与输入上下文一致或属于同一章节允许范围。",
       "题目要符合给定 modelId、年级和领域，答案必须稳定、可批改，不要生成超纲内容。",
       "analysis 要给出清晰解析，difficulty 必须是 1 到 5 的整数，type 必须是 基础题、应用题、思维题、变式题、多步骤题 之一。",
       "analysis 的语气要像耐心陪练：先解释为什么这样想，再拆步骤，最后给一句记忆总结。",
-      "如果无法生成高质量变式，就返回与 localQuestion 同知识点但参数、场景或问法变化后的 JSON。"
+      "如果无法生成高质量变式，就返回与 localQuestion 同知识点但参数、场景或问法变化后的 JSON。",
+      ...(CHAPTER_RULES[context.chapter]?.promptLines || [])
     ].join("\n");
     const payload = {
       modelId: body.modelId,
-      grade: body.grade,
-      domain: body.domain,
-      difficulty: body.difficulty,
-      questionType: body.questionType,
+      schoolStage: context.schoolStage,
+      subject: context.subject,
+      grade: context.grade,
+      domain: context.domain,
+      chapter: context.chapter,
+      knowledgePoint: context.knowledgePoint,
+      difficulty: context.difficulty,
+      questionType: context.questionType,
       mode: body.mode,
       studentProfile: body.studentProfile,
       localQuestion: fallback
@@ -797,10 +990,23 @@ async function handleGenerateQuestion(req, res) {
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const aiQuestion = await callAiJson(prompt, payload, { max_tokens: 650, temperature: 0.8 });
-        res.status(200).json(normalizeGeneratedQuestion(aiQuestion, fallback));
+        const aiQuestion = await callAiJson(prompt, payload, { max_tokens: 650, temperature: 0.8, timeout_ms: Math.floor(AI_GENERATE_TIMEOUT_MS / 2) });
+        const normalized = normalizeGeneratedQuestion(aiQuestion, {
+          ...fallback,
+          subject: context.subject,
+          schoolStage: context.schoolStage,
+          grade: context.grade,
+          domain: context.domain,
+          chapter: context.chapter,
+          questionType: context.questionType
+        });
+        validateGeneratedQuestionForContext(normalized, context);
+        res.status(200).json(normalized);
         return;
       } catch (error) {
+        if (String(error?.message || "").includes("timed out")) {
+          break;
+        }
         // Retry once when the model returns invalid JSON or an incomplete answer.
       }
     }

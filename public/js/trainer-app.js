@@ -365,6 +365,40 @@
     return choice(QUESTION_TYPE_POOL.filter((type) => type !== preferred));
   }
 
+  function stageParts(stageLabel) {
+    const text = String(stageLabel || "");
+    if (text.includes("小学")) {
+      return { schoolStage: "小学", subject: "数学" };
+    }
+    if (text.includes("初中")) {
+      return { schoolStage: "初中", subject: "数学" };
+    }
+    return { schoolStage: text || "初中", subject: "数学" };
+  }
+
+  function knowledgePointForTopic(topicItem) {
+    if (topicItem.id === "probability") {
+      return "随机事件 / 概率";
+    }
+    return Array.isArray(topicItem.tags) && topicItem.tags.length
+      ? topicItem.tags.slice(0, 2).join(" / ")
+      : topicItem.title;
+  }
+
+  function buildQuestionContext(topicItem, localQuestion, mode) {
+    const parts = stageParts(topicItem.stageLabel);
+    return {
+      schoolStage: parts.schoolStage,
+      subject: parts.subject,
+      grade: topicItem.grade,
+      domain: topicItem.domain,
+      chapter: topicItem.title,
+      knowledgePoint: localQuestion?.knowledge_point || knowledgePointForTopic(topicItem),
+      difficulty: localQuestion?.difficulty || selectDifficultyForMode(mode),
+      questionType: MODE_LABELS[mode] || localQuestion?.type || "基础练习"
+    };
+  }
+
   function selectDifficultyForMode(mode) {
     const profile = getProfile();
     const base = clampDifficulty(profile.current_difficulty);
@@ -396,27 +430,7 @@
   }
 
   function selectTopicForDiversity(preferredTopic, mode) {
-    if (mode === "mistake") {
-      return preferredTopic;
-    }
-    const profile = getProfile();
-    const preferredMastery = masteryFor(profile, preferredTopic.title);
-    const sameGradeTopics = allTopicsForSection(currentSection);
-
-    if (preferredMastery > 0.85) {
-      const unmastered = sameGradeTopics
-        .filter((item) => item.id !== preferredTopic.id && masteryFor(profile, item.title) <= 0.85);
-      if (unmastered.length && Math.random() < 0.65) {
-        return choice(unmastered);
-      }
-    }
-
-    if (!recentAllEqual(profile.recent.knowledge_points, 2, preferredTopic.id)) {
-      return preferredTopic;
-    }
-    const candidates = sameGradeTopics
-      .filter((item) => item.id !== preferredTopic.id);
-    return candidates.length ? choice(candidates) : preferredTopic;
+    return preferredTopic;
   }
 
   function rememberGeneratedQuestion(question) {
@@ -778,7 +792,7 @@
                 <p class="trainer-kicker">${MODE_LABELS[currentMode]}</p>
                 <h3>本轮练习</h3>
               </div>
-              <button type="button" class="primary-button compact" id="newQuestionButton">${isLoadingQuestion ? "生成中..." : "生成题目"}</button>
+              <button type="button" class="primary-button compact" id="newQuestionButton" ${isLoadingQuestion ? "disabled" : ""}>${isLoadingQuestion ? "生成中..." : "生成题目"}</button>
             </div>
             <div id="questionArea">
               ${renderQuestionArea()}
@@ -803,12 +817,19 @@
 
     app.querySelectorAll("[data-mode]").forEach((button) => {
       button.addEventListener("click", async () => {
+        if (isLoadingQuestion) {
+          return;
+        }
         currentMode = button.dataset.mode;
         await startQuestion(topicItem, currentMode);
       });
     });
 
-    app.querySelector("#newQuestionButton").addEventListener("click", () => startQuestion(topicItem, currentMode));
+    app.querySelector("#newQuestionButton").addEventListener("click", () => {
+      if (!isLoadingQuestion) {
+        startQuestion(topicItem, currentMode);
+      }
+    });
     bindQuestionEvents(topicItem);
     bindAnimationLectureEvents();
   }
@@ -916,30 +937,47 @@
   }
 
   async function generateAiQuestion(topicItem, localQuestion) {
+    const context = buildQuestionContext(topicItem, localQuestion, "ai_generate");
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 8500);
+
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const response = await fetch("/api/generate-question", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
           body: JSON.stringify({
             modelId: topicItem.id,
+            schoolStage: context.schoolStage,
+            subject: context.subject,
             grade: topicItem.grade,
             domain: topicItem.domain,
+            chapter: context.chapter,
+            knowledgePoint: context.knowledgePoint,
             mode: "ai_generate",
             difficulty: localQuestion.difficulty,
-            questionType: localQuestion.type,
+            questionType: context.questionType,
             studentProfile: getProfile(),
             localQuestion: {
               question: localQuestion.question,
               answer: localQuestion.answer,
+              standardAnswer: localQuestion.answer,
               answerValue: localQuestion.answerValue,
               aliases: localQuestion.aliases,
               steps: localQuestion.steps.map((step) => step.content || step),
               analysis: localQuestion.analysis,
               explanation: localQuestion.explanation,
               knowledge_point: localQuestion.knowledge_point,
+              knowledgePoint: localQuestion.knowledge_point,
+              chapter: localQuestion.chapter || topicItem.title,
+              domain: localQuestion.domain || topicItem.domain,
+              grade: localQuestion.grade || topicItem.grade,
+              subject: localQuestion.subject || context.subject,
+              schoolStage: localQuestion.schoolStage || context.schoolStage,
               difficulty: localQuestion.difficulty,
               type: localQuestion.type,
+              questionType: localQuestion.questionType || context.questionType,
               variantStyle: localQuestion.variantStyle
             }
           })
@@ -947,12 +985,18 @@
         const data = await response.json();
         const normalized = normalizeQuestion(data, topicItem, localQuestion.difficulty, localQuestion);
         if (normalized.question && normalized.answer) {
+          window.clearTimeout(timeoutId);
           return normalized;
         }
       } catch (error) {
+        if (error?.name === "AbortError") {
+          break;
+        }
         // Try once more, then use the local seed.
       }
     }
+
+    window.clearTimeout(timeoutId);
 
     return {
       ...localQuestion,
@@ -962,8 +1006,13 @@
 
   function normalizeQuestion(data, topicItem, difficulty, fallback) {
     const analysis = String(data?.analysis || data?.explanation || fallback.analysis || fallback.explanation || "").trim();
-    const steps = Array.isArray(data?.steps) && data.steps.length > 0
-      ? data.steps.map((step, index) => ({
+    const rawSteps = Array.isArray(data?.solutionSteps) && data.solutionSteps.length > 0
+      ? data.solutionSteps
+      : Array.isArray(data?.steps)
+        ? data.steps
+        : [];
+    const steps = rawSteps.length > 0
+      ? rawSteps.map((step, index) => ({
           title: `步骤${index + 1}`,
           content: String(step || "").trim(),
           explain: index === 0 ? "先读懂条件，再选择对应方法。" : "保持每一步都有依据。"
@@ -971,7 +1020,7 @@
       : fallback.steps;
 
     const questionText = String(data?.question || "").trim();
-    const answer = String(data?.answer || "").trim();
+    const answer = String(data?.standardAnswer || data?.answer || "").trim();
     const answerContext = signedContextFor(questionText);
     const semanticAnswerValue = answerContext ? signedValueFromAnswer(answer, answerContext) : undefined;
     const numericAnswerValue = Number(data?.answerValue);
@@ -982,19 +1031,29 @@
       ...fallback,
       id: `q_${Date.now()}_${randomInt(1000, 9999)}`,
       grade: topicItem.grade,
+      schoolStage: data?.schoolStage || fallback.schoolStage || stageParts(topicItem.stageLabel).schoolStage,
+      subject: data?.subject || fallback.subject || "数学",
+      domain: data?.domain || fallback.domain || topicItem.domain,
+      chapter: data?.chapter || fallback.chapter || topicItem.title,
       knowledgeId: topicItem.id,
       knowledge: topicItem.title,
-      knowledge_point: String(data?.knowledge_point || fallback.knowledge_point || topicItem.title).trim(),
-      type: String(data?.type || fallback.type || "变式题").trim(),
+      knowledge_point: String(data?.knowledgePoint || data?.knowledge_point || fallback.knowledge_point || topicItem.title).trim(),
+      type: String(data?.questionType || data?.type || fallback.type || "变式题").trim(),
       difficulty,
       question: questionText,
       answer,
+      standardAnswer: answer,
+      answerType: data?.answerType || fallback.answerType,
       answerValue,
       aliases: Array.isArray(data?.aliases) ? data.aliases : fallback.aliases,
       steps,
       analysis,
       explanation: analysis,
-      errorTags: Array.isArray(data?.errorTags) && data.errorTags.length ? data.errorTags : fallback.errorTags,
+      errorTags: Array.isArray(data?.errorTags) && data.errorTags.length
+        ? data.errorTags
+        : Array.isArray(data?.commonMistakes) && data.commonMistakes.length
+          ? data.commonMistakes
+          : fallback.errorTags,
       commonMistake: fallback.commonMistake,
       variantStyle: String(data?.variantStyle || fallback.variantStyle || "AI变式").trim()
     });
@@ -1101,14 +1160,21 @@
       id: `q_${Date.now()}_${randomInt(1000, 9999)}`,
       grade: topicItem.grade,
       stage: topicItem.stageLabel,
+      schoolStage: stageParts(topicItem.stageLabel).schoolStage,
+      subject: "数学",
+      domain: topicItem.domain,
+      chapter: topicItem.title,
       knowledgeId: topicItem.id,
       knowledge: topicItem.title,
-      knowledge_point: topicItem.title,
+      knowledge_point: partial.knowledge_point || topicItem.title,
       type: questionType,
+      questionType,
       subtype: partial.type || "计算题",
       difficulty,
       question,
       answer: partial.answer,
+      standardAnswer: partial.answer,
+      answerType: partial.answerType,
       answerValue: partial.answerValue,
       aliases: partial.aliases || [],
       steps,
@@ -1777,18 +1843,65 @@
   }
 
   function genProbability(topicItem, mode) {
-    const red = randomInt(2, 8);
-    const white = randomInt(2, 8);
-    const total = red + white;
+    const templates = [
+      () => {
+        const red = randomInt(2, 8);
+        const white = randomInt(2, 8);
+        const total = red + white;
+        return {
+          type: "摸球问题",
+          knowledge_point: "简单概率",
+          question: `袋子里有 ${red} 个红球和 ${white} 个白球，随机摸出 1 个球，摸到红球的概率是多少？`,
+          answer: `${red}/${total}`,
+          aliases: [`${total}分之${red}`, round(red / total)],
+          answerValue: red / total,
+          steps: stepList([`总球数 = ${red} + ${white} = ${total}`, `概率 = 红球数 ÷ 总数 = ${red}/${total}`])
+        };
+      },
+      () => ({
+        type: "掷骰子问题",
+        knowledge_point: "简单概率",
+        question: "掷一个均匀骰子，掷出偶数的概率是多少？",
+        answer: "1/2",
+        aliases: ["3/6", "0.5", "50%"],
+        answerValue: 0.5,
+        steps: stepList(["骰子共有 6 个等可能结果", "偶数有 2、4、6，共 3 个", "概率 = 3/6 = 1/2"])
+      }),
+      () => ({
+        type: "抛硬币问题",
+        knowledge_point: "简单概率",
+        question: "抛一枚均匀硬币，正面朝上的概率是多少？",
+        answer: "1/2",
+        aliases: ["0.5", "50%"],
+        answerValue: 0.5,
+        steps: stepList(["硬币有正面、反面 2 个等可能结果", "正面朝上有 1 个目标结果", "概率 = 1/2"])
+      }),
+      () => ({
+        type: "抽数问题",
+        knowledge_point: "简单概率",
+        question: "从 1、2、3、4、5 中随机抽一个数，抽到奇数的概率是多少？",
+        answer: "3/5",
+        aliases: ["0.6", "60%"],
+        answerValue: 0.6,
+        steps: stepList(["共有 5 个等可能结果", "奇数有 1、3、5，共 3 个", "概率 = 3/5"])
+      }),
+      () => ({
+        type: "转盘问题",
+        knowledge_point: "简单概率",
+        question: "一个转盘被平均分成 4 份，其中 1 份是红色，随机转一次，指针落在红色区域的概率是多少？",
+        answer: "1/4",
+        aliases: ["0.25", "25%"],
+        answerValue: 0.25,
+        steps: stepList(["转盘平均分成 4 份，所以共有 4 个等可能结果", "红色区域有 1 份", "概率 = 1/4"])
+      })
+    ];
+    const partial = choice(templates)();
     return baseQuestion(topicItem, mode, {
-      type: "简单概率",
-      question: `袋子里有 ${red} 个红球和 ${white} 个白球，随机摸出 1 个球，摸到红球的概率是多少？`,
-      answer: `${red}/${total}`,
-      aliases: [`${total}分之${red}`, round(red / total)],
-      answerValue: red / total,
-      steps: stepList([`总球数 = ${red} + ${white} = ${total}`, `红球概率 = 红球数 ÷ 总数 = ${red}/${total}`]),
+      ...partial,
+      answerType: "number",
       explanation: "等可能事件的概率 = 目标结果数 ÷ 所有可能结果数。",
-      errorTags: ["总数遗漏", "概率公式"]
+      errorTags: ["总数遗漏", "概率公式"],
+      commonMistake: "只数目标结果，忘记把所有等可能结果作为分母。"
     });
   }
 

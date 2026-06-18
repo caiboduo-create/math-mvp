@@ -1180,7 +1180,1595 @@
     container.appendChild(wrap);
   }
 
+  function addLabHeading(stage, title, question) {
+    const heading = createEl("div", "lab-task");
+    heading.append(createEl("strong", "", title), createEl("span", "", question));
+    stage.appendChild(heading);
+    return heading;
+  }
+
+  function addButtonGroup(parent, buttons) {
+    const group = createEl("div", "lab-button-row");
+    buttons.forEach((button) => group.appendChild(button));
+    parent.appendChild(group);
+    return group;
+  }
+
+  function setActiveButton(buttons, activeIndex) {
+    buttons.forEach((button, index) => button.classList.toggle("is-active", index === activeIndex));
+  }
+
+  function renderAxis(svg, min, max, y = 118) {
+    svg.appendChild(createSvgEl("line", { x1: 38, y1: y, x2: 602, y2: y, class: "axis-line" }));
+    svg.appendChild(createSvgEl("polygon", { points: `602,${y} 590,${y - 6} 590,${y + 6}`, class: "axis-arrow" }));
+    for (let value = min; value <= max; value += 1) {
+      const x = 54 + ((value - min) / (max - min)) * 532;
+      svg.appendChild(createSvgEl("line", { x1: x, y1: y - 8, x2: x, y2: y + 8, class: "tick-line" }));
+      if (value % 2 === 0 || max - min <= 12) {
+        svg.appendChild(createSvgEl("text", { x, y: y + 32, class: "custom-svg-label", "text-anchor": "middle" }, String(value)));
+      }
+    }
+  }
+
+  function axisPosition(value, min, max) {
+    return 54 + ((value - min) / (max - min)) * 532;
+  }
+
+  function renderRationalNumberLab(model, container) {
+    let a = -3;
+    let b = 4;
+    let mode = "compare";
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "有理数数轴实验台",
+      "绝对值表示一个数到 0 的距离；加减法可以理解为在数轴上向左或向右移动。"
+    );
+    addLabHeading(stage, "当前任务", "拖动 A、B，观察大小比较、绝对值和有理数加减。");
+    const svg = createSvg({ viewBox: "0 0 640 260", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      renderAxis(svg, -10, 10, 132);
+      const xA = axisPosition(a, -10, 10);
+      const xB = axisPosition(b, -10, 10);
+      const x0 = axisPosition(0, -10, 10);
+      svg.appendChild(createSvgEl("line", { x1: x0, y1: 102, x2: xA, y2: 102, class: "measure-line" }));
+      svg.appendChild(createSvgEl("line", { x1: x0, y1: 162, x2: xB, y2: 162, class: "curve-line" }));
+      svg.appendChild(createSvgEl("circle", { cx: xA, cy: 132, r: 10, class: "custom-point" }));
+      svg.appendChild(createSvgEl("circle", { cx: xB, cy: 132, r: 10, class: "custom-point warm" }));
+      svg.appendChild(createSvgEl("text", { x: xA, y: 84, class: "custom-svg-label", "text-anchor": "middle" }, `A=${a}`));
+      svg.appendChild(createSvgEl("text", { x: xB, y: 198, class: "custom-svg-label", "text-anchor": "middle" }, `B=${b}`));
+
+      if (mode !== "compare") {
+        const target = mode === "add" ? a + b : a - b;
+        const from = axisPosition(a, -10, 10);
+        const to = axisPosition(Math.max(-10, Math.min(10, target)), -10, 10);
+        svg.appendChild(createSvgEl("path", { d: `M ${from} 54 Q ${(from + to) / 2} 18 ${to} 54`, class: "curve-line" }));
+        svg.appendChild(createSvgEl("polygon", { points: `${to},54 ${to - 10},49 ${to - 7},60`, class: "axis-arrow" }));
+        svg.appendChild(createSvgEl("text", { x: Math.min(580, Math.max(70, to)), y: 36, class: "custom-svg-label", "text-anchor": "middle" }, `${mode === "add" ? "A+B" : "A-B"}=${target}`));
+      }
+
+      const compare = a > b ? ">" : a < b ? "<" : "=";
+      const operationText = mode === "add"
+        ? `演示加法：从 A=${a} 出发，${b >= 0 ? "向右" : "向左"}移动 ${Math.abs(b)} 格，得到 A+B=${a + b}。`
+        : mode === "subtract"
+          ? `演示减法：A-B 等于加上 B 的相反数，从 ${a} 移动到 ${a - b}。`
+          : `大小比较：A ${compare} B。绝对值：|A|=${Math.abs(a)}，|B|=${Math.abs(b)}。`;
+      result.innerHTML = `<strong>实时结果</strong><p>A=${a}，B=${b}，${operationText}</p>`;
+    }
+
+    controls.appendChild(makeRange("点 A", -10, 10, 1, a, (value) => {
+      a = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("点 B", -10, 10, 1, b, (value) => {
+      b = value;
+      draw();
+    }));
+    const buttons = [
+      makeButton("比较大小", () => {
+        mode = "compare";
+        setActiveButton(buttons, 0);
+        draw();
+      }),
+      makeButton("演示加法", () => {
+        mode = "add";
+        setActiveButton(buttons, 1);
+        draw();
+      }),
+      makeButton("演示减法", () => {
+        mode = "subtract";
+        setActiveButton(buttons, 2);
+        draw();
+      }),
+      makeButton("重置", () => {
+        a = -3;
+        b = 4;
+        mode = "compare";
+        setActiveButton(buttons, 0);
+        draw();
+      })
+    ];
+    addButtonGroup(controls, buttons);
+    setActiveButton(buttons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderGeometryBasicsBuilder(model, container) {
+    const modes = ["直线", "射线", "线段", "角"];
+    let modeIndex = 2;
+    let length = 7;
+    let angle = 60;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "点线角构造实验台",
+      "直线没有端点，射线有一个端点，线段有两个端点；角由两条有公共端点的射线组成。"
+    );
+    addLabHeading(stage, "当前任务", "切换图形类型，观察端点、箭头、长度和角度分类。");
+    const svg = createSvg({ viewBox: "0 0 640 300", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      const mode = modes[modeIndex];
+      const cx = 320;
+      const cy = 160;
+      const half = length * 26;
+      if (mode === "角") {
+        const rad = (angle * Math.PI) / 180;
+        const x = cx + Math.cos(rad) * 180;
+        const y = cy - Math.sin(rad) * 180;
+        svg.appendChild(createSvgEl("line", { x1: cx, y1: cy, x2: cx + 190, y2: cy, class: "axis-line" }));
+        svg.appendChild(createSvgEl("line", { x1: cx, y1: cy, x2: x, y2: y, class: "measure-line" }));
+        svg.appendChild(createSvgEl("polygon", { points: `${cx + 190},${cy} ${cx + 178},${cy - 6} ${cx + 178},${cy + 6}`, class: "axis-arrow" }));
+        svg.appendChild(createSvgEl("polygon", { points: `${x},${y} ${x - 10},${y - 2} ${x - 4},${y + 9}`, class: "axis-arrow" }));
+        svg.appendChild(createSvgEl("path", { d: `M ${cx + 48} ${cy} A 48 48 0 0 0 ${cx + Math.cos(rad) * 48} ${cy - Math.sin(rad) * 48}`, class: "curve-line" }));
+        svg.appendChild(createSvgEl("circle", { cx, cy, r: 8, class: "custom-point" }));
+        svg.appendChild(createSvgEl("text", { x: cx + 52, y: cy - 26, class: "custom-svg-label" }, `${angle}°`));
+        const type = angle < 90 ? "锐角" : angle === 90 ? "直角" : angle < 180 ? "钝角" : "平角";
+        result.innerHTML = `<strong>实时结果</strong><p>当前是${type}。角的大小由两条射线张开的程度决定。</p>`;
+        return;
+      }
+      const x1 = cx - half;
+      const x2 = cx + half;
+      svg.appendChild(createSvgEl("line", { x1, y1: cy, x2, y2: cy, class: "measure-line" }));
+      if (mode === "直线") {
+        svg.appendChild(createSvgEl("polygon", { points: `${x1},${cy} ${x1 + 12},${cy - 6} ${x1 + 12},${cy + 6}`, class: "axis-arrow" }));
+        svg.appendChild(createSvgEl("polygon", { points: `${x2},${cy} ${x2 - 12},${cy - 6} ${x2 - 12},${cy + 6}`, class: "axis-arrow" }));
+      } else if (mode === "射线") {
+        svg.appendChild(createSvgEl("circle", { cx: x1, cy, r: 8, class: "custom-point" }));
+        svg.appendChild(createSvgEl("polygon", { points: `${x2},${cy} ${x2 - 12},${cy - 6} ${x2 - 12},${cy + 6}`, class: "axis-arrow" }));
+      } else {
+        svg.appendChild(createSvgEl("circle", { cx: x1, cy, r: 8, class: "custom-point" }));
+        svg.appendChild(createSvgEl("circle", { cx: x2, cy, r: 8, class: "custom-point warm" }));
+      }
+      svg.appendChild(createSvgEl("text", { x: cx, y: cy + 42, class: "custom-svg-label", "text-anchor": "middle" }, `${mode}：${mode === "线段" ? `长度约 ${length}` : "按箭头方向延伸"}`));
+      const text = mode === "直线" ? "直线向两边无限延伸，没有端点。" : mode === "射线" ? "射线从端点出发，向一方无限延伸。" : "线段有两个端点，可以测量长度。";
+      result.innerHTML = `<strong>实时结果</strong><p>${text}</p>`;
+    }
+
+    const modeButtons = modes.map((label, index) => makeButton(label, () => {
+      modeIndex = index;
+      setActiveButton(modeButtons, index);
+      draw();
+    }));
+    addButtonGroup(controls, modeButtons);
+    controls.appendChild(makeRange("线段长度 / 线宽", 3, 9, 1, length, (value) => {
+      length = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("角度", 10, 180, 5, angle, (value) => {
+      angle = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      modeIndex = 2;
+      length = 7;
+      angle = 60;
+      setActiveButton(modeButtons, modeIndex);
+      draw();
+    }));
+    setActiveButton(modeButtons, modeIndex);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderRealNumberClassifier(model, container) {
+    const cards = [
+      { label: "3", value: 3, category: "自然数", note: "3 是自然数，也是整数、有理数和实数。" },
+      { label: "-5", value: -5, category: "整数", note: "-5 是整数，也是有理数和实数。" },
+      { label: "1/2", value: 0.5, category: "有理数", note: "1/2 能写成分数，是有理数。" },
+      { label: "0.25", value: 0.25, category: "有理数", note: "0.25 是有限小数，能写成 1/4。" },
+      { label: "√2", value: Math.sqrt(2), category: "无理数", note: "√2 是无限不循环小数，是无理数。" },
+      { label: "π", value: Math.PI, category: "无理数", note: "π 是无限不循环小数，是无理数。" },
+      { label: "√9", value: 3, category: "自然数", note: "√9=3，所以它属于自然数。" }
+    ];
+    const categories = ["自然数", "整数", "有理数", "无理数", "实数"];
+    let cardIndex = 0;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "实数分类实验台",
+      "有理数能写成两个整数的比；无理数是无限不循环小数，二者都属于实数。"
+    );
+    addLabHeading(stage, "当前任务", "判断数字卡片属于哪一类，并观察它在数轴上的近似位置。");
+    const card = createEl("div", "number-card big-number-card");
+    const svg = createSvg({ viewBox: "0 0 640 180", class: "custom-svg lab-svg" });
+    const setBox = createEl("div", "set-relation");
+    setBox.innerHTML = "<span>自然数</span><span>整数</span><span>有理数</span><span>实数</span><span>无理数也属于实数</span>";
+    stage.append(card, setBox, svg);
+
+    function draw(message = "请选择一个分类。") {
+      const item = cards[cardIndex];
+      card.textContent = item.label;
+      svg.replaceChildren();
+      renderAxis(svg, -6, 6, 88);
+      const x = axisPosition(Math.max(-6, Math.min(6, item.value)), -6, 6);
+      svg.appendChild(createSvgEl("circle", { cx: x, cy: 88, r: 10, class: "custom-point warm" }));
+      svg.appendChild(createSvgEl("text", { x, y: 52, class: "custom-svg-label", "text-anchor": "middle" }, `${item.label}≈${round(item.value, 3)}`));
+      result.innerHTML = `<strong>实时结果</strong><p>${message}</p><p>${item.note}</p>`;
+    }
+
+    addButtonGroup(controls, categories.map((category) => makeButton(category, () => {
+      const item = cards[cardIndex];
+      const ok = category === item.category || category === "实数";
+      draw(ok ? `判断正确：${item.label} 可以归入“${category}”。` : `再想一想：${item.label} 最贴切的分类是“${item.category}”。`);
+    })));
+    controls.appendChild(makeButton("换一张数字卡片", () => {
+      cardIndex = (cardIndex + 1) % cards.length;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      cardIndex = 0;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderSystemEliminationLab(model, container) {
+    let method = "add";
+    let step = 0;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "二元一次方程组消元实验台",
+      "消元的目标是先把两个未知数变成一个未知数，再代回求另一个未知数。"
+    );
+    addLabHeading(stage, "当前方程组", "x + y = 7；x - y = 1");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function sx(x) {
+      return 320 + x * 36;
+    }
+
+    function sy(y) {
+      return 260 - y * 28;
+    }
+
+    function drawGraph() {
+      svg.replaceChildren();
+      svg.appendChild(createSvgEl("line", { x1: 40, y1: 260, x2: 600, y2: 260, class: "axis-line" }));
+      svg.appendChild(createSvgEl("line", { x1: 320, y1: 32, x2: 320, y2: 290, class: "axis-line" }));
+      const line1 = `M ${sx(0)} ${sy(7)} L ${sx(7)} ${sy(0)}`;
+      const line2 = `M ${sx(-1)} ${sy(-2)} L ${sx(7)} ${sy(6)}`;
+      svg.appendChild(createSvgEl("path", { d: line1, class: "curve-line" }));
+      svg.appendChild(createSvgEl("path", { d: line2, class: "measure-line" }));
+      svg.appendChild(createSvgEl("circle", { cx: sx(4), cy: sy(3), r: 9, class: "custom-point warm" }));
+      svg.appendChild(createSvgEl("text", { x: sx(4) + 12, y: sy(3) - 10, class: "custom-svg-label" }, "交点 (4,3)"));
+      svg.appendChild(createSvgEl("text", { x: 54, y: 38, class: "custom-svg-label" }, "蓝线：x+y=7"));
+      svg.appendChild(createSvgEl("text", { x: 54, y: 64, class: "custom-svg-label" }, "黄线：x-y=1"));
+    }
+
+    function draw() {
+      drawGraph();
+      const steps = method === "add"
+        ? ["两个方程相加：(x+y)+(x-y)=7+1", "得到 2x=8，所以 x=4", "把 x=4 代回 x+y=7，得到 y=3"]
+        : ["由 x-y=1 得到 x=y+1", "代入 x+y=7：y+1+y=7", "得到 2y=6，所以 y=3，再得 x=4"];
+      result.innerHTML = `<strong>${method === "add" ? "加减消元" : "代入消元"}</strong><p>${steps[Math.min(step, 2)]}</p><p>方程组的解是 x=4，y=3；图像上就是两条直线的交点。</p>`;
+    }
+
+    const methodButtons = [
+      makeButton("加减消元", () => {
+        method = "add";
+        step = 0;
+        setActiveButton(methodButtons, 0);
+        draw();
+      }),
+      makeButton("代入消元", () => {
+        method = "substitute";
+        step = 0;
+        setActiveButton(methodButtons, 1);
+        draw();
+      })
+    ];
+    addButtonGroup(controls, methodButtons);
+    controls.appendChild(makeButton("下一步", () => {
+      step = Math.min(2, step + 1);
+      draw();
+    }));
+    controls.appendChild(makeButton("上一步", () => {
+      step = Math.max(0, step - 1);
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      step = 0;
+      method = "add";
+      setActiveButton(methodButtons, 0);
+      draw();
+    }));
+    setActiveButton(methodButtons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderInequalityNumberLineLab(model, container) {
+    const examples = [
+      { text: "2x + 3 > 11", solution: "x > 4", boundary: 4, type: "open", direction: "right", steps: ["两边同时减 3：2x > 8", "两边同时除以 2：x > 4", "在数轴上画空心圆点，并向右涂色。"] },
+      { text: "-3x ≤ 12", solution: "x ≥ -4", boundary: -4, type: "closed", direction: "right", steps: ["两边同时除以 -3", "除以负数时，不等号方向改变：x ≥ -4", "实心圆点表示包含 -4。"] },
+      { text: "-2 < x < 3", solution: "-2 < x < 3", boundary: -2, end: 3, type: "open", direction: "between", steps: ["这是区间不等式", "两个端点都不包含", "在 -2 和 3 之间涂色。"] }
+    ];
+    let index = 0;
+    let step = 0;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "不等式与数轴实验台",
+      "画解集时，空心圆点表示不包含端点，实心圆点表示包含端点。乘除负数时不等号方向要改变。"
+    );
+    const task = addLabHeading(stage, "当前不等式", examples[index].text);
+    const svg = createSvg({ viewBox: "0 0 640 230", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function drawNumberLine(example) {
+      svg.replaceChildren();
+      renderAxis(svg, -8, 8, 112);
+      const startX = axisPosition(example.boundary, -8, 8);
+      if (example.direction === "between") {
+        const endX = axisPosition(example.end, -8, 8);
+        svg.appendChild(createSvgEl("line", { x1: startX, y1: 112, x2: endX, y2: 112, class: "range-highlight" }));
+        svg.appendChild(createSvgEl("circle", { cx: startX, cy: 112, r: 10, class: "custom-point hollow" }));
+        svg.appendChild(createSvgEl("circle", { cx: endX, cy: 112, r: 10, class: "custom-point hollow" }));
+      } else {
+        const x2 = example.direction === "right" ? 592 : 54;
+        svg.appendChild(createSvgEl("line", { x1: startX, y1: 112, x2, y2: 112, class: "range-highlight" }));
+        svg.appendChild(createSvgEl("circle", { cx: startX, cy: 112, r: 10, class: `custom-point ${example.type === "open" ? "hollow" : ""}` }));
+      }
+      svg.appendChild(createSvgEl("text", { x: 320, y: 48, class: "custom-svg-label", "text-anchor": "middle" }, `解集：${example.solution}`));
+    }
+
+    function draw(extra = "") {
+      const example = examples[index];
+      task.querySelector("span").textContent = example.text;
+      drawNumberLine(example);
+      result.innerHTML = `<strong>第 ${step + 1} 步</strong><p>${example.steps[step]}</p><p>${extra || "正确操作：等式或不等式两边做同样的变形。"}</p>`;
+    }
+
+    controls.appendChild(makeButton("下一步", () => {
+      step = Math.min(2, step + 1);
+      draw();
+    }));
+    controls.appendChild(makeButton("错误演示：只改一边", () => {
+      draw("错误操作：只改变一边会破坏大小关系，必须两边同时操作。");
+    }));
+    controls.appendChild(makeButton("换一个例子", () => {
+      index = (index + 1) % examples.length;
+      step = 0;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      index = 0;
+      step = 0;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderSurveyChartLab(model, container) {
+    let values = [12, 9, 7, 4];
+    let surveyMode = "全面调查";
+    const labels = ["篮球", "音乐", "阅读", "绘画"];
+    const colors = ["#1d65b7", "#f0b429", "#2e86de", "#e85d75"];
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "数据调查与图表实验台",
+      "统计表适合看具体数量，条形图适合比较多少，扇形图适合看比例。"
+    );
+    addLabHeading(stage, "当前任务", "模拟班级兴趣调查，观察人数、比例和扇形图圆心角。");
+    const board = createEl("div", "survey-board");
+    stage.appendChild(board);
+
+    function draw() {
+      const total = values.reduce((sum, value) => sum + value, 0);
+      board.replaceChildren();
+      const table = createEl("div", "survey-table");
+      labels.forEach((label, index) => {
+        const percent = values[index] / total;
+        const row = createEl("div", "survey-row");
+        row.innerHTML = `<span>${label}</span><strong>${values[index]} 人</strong><em>${round(percent * 100, 1)}% · ${round(percent * 360)}°</em>`;
+        table.appendChild(row);
+      });
+      const bars = createEl("div", "survey-bars");
+      labels.forEach((label, index) => {
+        const bar = createEl("div", "survey-bar");
+        bar.style.height = `${Math.max(20, (values[index] / Math.max(...values)) * 130)}px`;
+        bar.style.background = colors[index];
+        bar.textContent = label;
+        bars.appendChild(bar);
+      });
+      const pie = createEl("div", "survey-pie");
+      let start = 0;
+      const gradient = labels.map((label, index) => {
+        const end = start + (values[index] / total) * 360;
+        const segment = `${colors[index]} ${round(start)}deg ${round(end)}deg`;
+        start = end;
+        return segment;
+      }).join(", ");
+      pie.style.background = `conic-gradient(${gradient})`;
+      board.append(table, bars, pie);
+      result.innerHTML = `<strong>实时结果</strong><p>${surveyMode}：共 ${total} 人。扇形图圆心角 = 某项人数 ÷ 总人数 × 360°。</p>`;
+    }
+
+    labels.forEach((label, index) => {
+      controls.appendChild(makeRange(`${label}人数`, 1, 20, 1, values[index], (value) => {
+        values[index] = value;
+        draw();
+      }));
+    });
+    const modeButtons = [
+      makeButton("全面调查", () => {
+        surveyMode = "全面调查";
+        setActiveButton(modeButtons, 0);
+        draw();
+      }),
+      makeButton("抽样调查", () => {
+        surveyMode = "抽样调查";
+        setActiveButton(modeButtons, 1);
+        draw();
+      })
+    ];
+    addButtonGroup(controls, modeButtons);
+    controls.appendChild(makeButton("重置", () => {
+      values = [12, 9, 7, 4];
+      surveyMode = "全面调查";
+      setActiveButton(modeButtons, 0);
+      draw();
+    }));
+    setActiveButton(modeButtons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderCongruenceTestLab(model, container) {
+    const conditions = [
+      { key: "SSS", meaning: "三边分别相等", missing: "需要确认三条对应边都相等。" },
+      { key: "SAS", meaning: "两边及其夹角分别相等", missing: "必须是夹在两条边之间的角。" },
+      { key: "ASA", meaning: "两角及其夹边分别相等", missing: "需要夹边也对应相等。" },
+      { key: "AAS", meaning: "两角及一边分别相等", missing: "还要有一组对应边相等。" },
+      { key: "HL", meaning: "直角三角形中斜边和一条直角边相等", missing: "只适用于直角三角形。" }
+    ];
+    let index = 0;
+    let satisfied = true;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "全等三角形判定实验台",
+      "全等不是看起来像，而是要满足对应边和对应角的判定条件。"
+    );
+    addLabHeading(stage, "当前任务", "选择判定方法，观察条件满足时两个三角形能否重合。");
+    const svg = createSvg({ viewBox: "0 0 640 300", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      const condition = conditions[index];
+      svg.replaceChildren();
+      const rightOffset = satisfied ? 0 : 28;
+      svg.appendChild(createSvgEl("polygon", { points: "90,230 250,230 160,90", class: "shape-fill" }));
+      svg.appendChild(createSvgEl("polygon", { points: "90,230 250,230 160,90", class: "shape-outline" }));
+      svg.appendChild(createSvgEl("polygon", { points: `${390 + rightOffset},230 ${550 + rightOffset},230 ${460 + rightOffset},90`, class: "shape-fill warm-fill" }));
+      svg.appendChild(createSvgEl("polygon", { points: `${390 + rightOffset},230 ${550 + rightOffset},230 ${460 + rightOffset},90`, class: "shape-outline" }));
+      svg.appendChild(createSvgEl("text", { x: 95, y: 68, class: "custom-svg-label" }, "△ABC"));
+      svg.appendChild(createSvgEl("text", { x: 390, y: 68, class: "custom-svg-label" }, "△A'B'C'"));
+      svg.appendChild(createSvgEl("text", { x: 320, y: 44, class: "custom-svg-label", "text-anchor": "middle" }, satisfied ? "条件满足：可重合" : "条件不足：不能判定全等"));
+      result.innerHTML = `<strong>${condition.key}</strong><p>${condition.meaning}。</p><p>${satisfied ? "满足该条件时，两个三角形可以通过平移、旋转或翻折重合，所以全等。" : condition.missing}</p>`;
+    }
+
+    const conditionButtons = conditions.map((condition, buttonIndex) => makeButton(condition.key, () => {
+      index = buttonIndex;
+      setActiveButton(conditionButtons, buttonIndex);
+      draw();
+    }));
+    addButtonGroup(controls, conditionButtons);
+    controls.appendChild(makeButton("切换满足/缺少条件", () => {
+      satisfied = !satisfied;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      index = 0;
+      satisfied = true;
+      setActiveButton(conditionButtons, 0);
+      draw();
+    }));
+    setActiveButton(conditionButtons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderSymmetryMirrorLab(model, container) {
+    const axes = ["竖直对称轴", "水平对称轴", "斜对称轴"];
+    let axisIndex = 0;
+    let x = 3;
+    let y = 2;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "轴对称镜像实验台",
+      "对应点连线被对称轴垂直平分，对应点到对称轴的距离相等。"
+    );
+    addLabHeading(stage, "当前任务", "移动原点 A，观察对称点 A' 怎样同步变化。");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      const cx = 320;
+      const cy = 160;
+      const scale = 34;
+      let ax = cx - x * scale;
+      let ay = cy - y * scale;
+      let bx = cx + x * scale;
+      let by = ay;
+      if (axisIndex === 1) {
+        ax = cx + x * scale;
+        ay = cy - y * scale;
+        bx = ax;
+        by = cy + y * scale;
+      } else if (axisIndex === 2) {
+        ax = cx - x * scale;
+        ay = cy - y * scale;
+        bx = cx + y * scale;
+        by = cy + x * scale;
+      }
+      if (axisIndex === 0) {
+        svg.appendChild(createSvgEl("line", { x1: cx, y1: 28, x2: cx, y2: 292, class: "axis-line dashed" }));
+      } else if (axisIndex === 1) {
+        svg.appendChild(createSvgEl("line", { x1: 54, y1: cy, x2: 586, y2: cy, class: "axis-line dashed" }));
+      } else {
+        svg.appendChild(createSvgEl("line", { x1: 120, y1: 280, x2: 520, y2: 40, class: "axis-line dashed" }));
+      }
+      svg.appendChild(createSvgEl("line", { x1: ax, y1: ay, x2: bx, y2: by, class: "measure-line dashed" }));
+      svg.appendChild(createSvgEl("circle", { cx: ax, cy: ay, r: 10, class: "custom-point" }));
+      svg.appendChild(createSvgEl("circle", { cx: bx, cy: by, r: 10, class: "custom-point warm" }));
+      svg.appendChild(createSvgEl("text", { x: ax - 34, y: ay - 12, class: "custom-svg-label" }, "A 原点"));
+      svg.appendChild(createSvgEl("text", { x: bx + 12, y: by - 12, class: "custom-svg-label" }, "A' 对称点"));
+      result.innerHTML = `<strong>实时结果</strong><p>当前：${axes[axisIndex]}。A 与 A' 到对称轴距离相等，对称轴是 AA' 的垂直平分线。</p>`;
+    }
+
+    const axisButtons = axes.map((label, buttonIndex) => makeButton(label, () => {
+      axisIndex = buttonIndex;
+      setActiveButton(axisButtons, buttonIndex);
+      draw();
+    }));
+    addButtonGroup(controls, axisButtons);
+    controls.appendChild(makeRange("横向距离", 1, 5, 1, x, (value) => {
+      x = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("高度", -3, 4, 1, y, (value) => {
+      y = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("找出对称点", () => {
+      result.innerHTML += "<p>练习：先从原点向对称轴作垂线，再在另一侧取相同距离，就是对称点。</p>";
+    }));
+    setActiveButton(axisButtons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderIsoscelesTriangleLab(model, container) {
+    let height = 5;
+    let showLines = true;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "等腰三角形性质实验台",
+      "等边对等角；在等腰三角形中，顶角平分线、底边中线和底边上的高重合。"
+    );
+    addLabHeading(stage, "当前任务", "拖动顶点高度，观察两条腰、两个底角和三线合一。");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      const base = 240;
+      const h = height * 28;
+      const ax = 200;
+      const bx = ax + base;
+      const ay = 250;
+      const cx = 320;
+      const cy = ay - h;
+      const side = Math.sqrt(Math.pow(base / 2, 2) + h * h) / 28;
+      const baseAngle = Math.atan2(h, base / 2) * 180 / Math.PI;
+      svg.appendChild(createSvgEl("polygon", { points: `${ax},${ay} ${bx},${ay} ${cx},${cy}`, class: "shape-fill" }));
+      svg.appendChild(createSvgEl("polygon", { points: `${ax},${ay} ${bx},${ay} ${cx},${cy}`, class: "shape-outline" }));
+      if (showLines) {
+        svg.appendChild(createSvgEl("line", { x1: cx, y1: cy, x2: cx, y2: ay, class: "measure-line dashed" }));
+        svg.appendChild(createSvgEl("text", { x: cx + 10, y: (cy + ay) / 2, class: "custom-svg-label" }, "高 / 中线 / 角平分线"));
+      }
+      svg.appendChild(createSvgEl("text", { x: ax - 20, y: ay + 28, class: "custom-svg-label" }, `${round(baseAngle)}°`));
+      svg.appendChild(createSvgEl("text", { x: bx - 20, y: ay + 28, class: "custom-svg-label" }, `${round(baseAngle)}°`));
+      svg.appendChild(createSvgEl("text", { x: 320, y: 36, class: "custom-svg-label", "text-anchor": "middle" }, `两腰相等：${round(side)} = ${round(side)}`));
+      result.innerHTML = `<strong>实时结果</strong><p>两个底角都约为 ${round(baseAngle)}°，所以等腰三角形体现“等边对等角”。</p>`;
+    }
+
+    controls.appendChild(makeRange("顶点高度", 3, 8, 1, height, (value) => {
+      height = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("显示/隐藏三线合一", () => {
+      showLines = !showLines;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      height = 5;
+      showLines = true;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderPolynomialAreaMultiply(model, container) {
+    let m = 2;
+    let n = 3;
+    let step = 0;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "整式乘法面积实验台",
+      "矩形面积等于长乘宽，把边长拆成 x 和常数，就能看到分配律。"
+    );
+    addLabHeading(stage, "当前任务", "用面积模型展开 (x + m)(x + n)。");
+    const grid = createEl("div", "poly-area-grid");
+    stage.appendChild(grid);
+
+    function draw() {
+      grid.innerHTML = `
+        <div class="area-cell area-x2">x²</div>
+        <div class="area-cell area-x">${n}x</div>
+        <div class="area-cell area-x">${m}x</div>
+        <div class="area-cell area-one">${m * n}</div>
+      `;
+      const lines = [
+        `(x + ${m})(x + ${n})`,
+        `= x² + ${n}x + ${m}x + ${m * n}`,
+        `= x² + ${m + n}x + ${m * n}`
+      ];
+      result.innerHTML = `<strong>第 ${step + 1} 步</strong><p>${lines[step]}</p><p>四块面积分别是 x²、${n}x、${m}x、${m * n}，相加就是整个矩形面积。</p>`;
+    }
+
+    controls.appendChild(makeRange("下边常数 m", 1, 6, 1, m, (value) => {
+      m = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("右边常数 n", 1, 6, 1, n, (value) => {
+      n = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("下一步", () => {
+      step = Math.min(2, step + 1);
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      m = 2;
+      n = 3;
+      step = 0;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderMultiplicationFormulaAreaLab(model, container) {
+    const modes = [
+      { label: "(a + b)²", sign: "plus" },
+      { label: "(a - b)²", sign: "minus" },
+      { label: "(a + b)(a - b)", sign: "difference" }
+    ];
+    let a = 5;
+    let b = 2;
+    let modeIndex = 0;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "乘法公式拼图实验台",
+      "公式来自面积分割：每一块面积都能在图中找到对应位置。"
+    );
+    addLabHeading(stage, "当前任务", "切换公式并改变 a、b，观察面积图和公式同步变化。");
+    const grid = createEl("div", "formula-area-board");
+    stage.appendChild(grid);
+
+    function draw() {
+      const mode = modes[modeIndex];
+      const plusFormula = `(a + b)² = a² + 2ab + b² = ${a * a} + ${2 * a * b} + ${b * b} = ${(a + b) ** 2}`;
+      const minusFormula = `(a - b)² = a² - 2ab + b² = ${a * a} - ${2 * a * b} + ${b * b} = ${(a - b) ** 2}`;
+      const diffFormula = `(a + b)(a - b) = a² - b² = ${a * a} - ${b * b} = ${a * a - b * b}`;
+      grid.innerHTML = `
+        <div class="area-cell area-x2">a²<br>${a * a}</div>
+        <div class="area-cell area-x">ab<br>${a * b}</div>
+        <div class="area-cell area-x">ab<br>${a * b}</div>
+        <div class="area-cell area-one">b²<br>${b * b}</div>
+      `;
+      const formula = mode.sign === "plus" ? plusFormula : mode.sign === "minus" ? minusFormula : diffFormula;
+      result.innerHTML = `<strong>${mode.label}</strong><p>${formula}</p><p>${mode.sign === "difference" ? "平方差可以看成大正方形去掉小正方形。" : "两个 ab 区域说明中间项为什么是 2ab。"}</p>`;
+    }
+
+    const modeButtons = modes.map((mode, index) => makeButton(mode.label, () => {
+      modeIndex = index;
+      setActiveButton(modeButtons, index);
+      draw();
+    }));
+    addButtonGroup(controls, modeButtons);
+    controls.appendChild(makeRange("a", 3, 9, 1, a, (value) => {
+      a = value;
+      b = Math.min(b, a - 1);
+      draw();
+    }));
+    controls.appendChild(makeRange("b", 1, 5, 1, b, (value) => {
+      b = Math.min(value, a - 1);
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      a = 5;
+      b = 2;
+      modeIndex = 0;
+      setActiveButton(modeButtons, 0);
+      draw();
+    }));
+    setActiveButton(modeButtons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderFactorizationPuzzle(model, container) {
+    const examples = [
+      { type: "十字相乘", b: 5, c: 6, p: 2, q: 3, expression: "x² + 5x + 6" },
+      { type: "十字相乘", b: 7, c: 12, p: 3, q: 4, expression: "x² + 7x + 12" },
+      { type: "提公因式", expression: "6x + 9", result: "3(2x + 3)" },
+      { type: "平方差", expression: "x² - 16", result: "(x + 4)(x - 4)" }
+    ];
+    let index = 0;
+    let pGuess = 2;
+    let qGuess = 3;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "因式分解反向拼图",
+      "因式分解是整式乘法的逆过程：先观察结构，再反推出乘积形式。"
+    );
+    const task = addLabHeading(stage, "当前任务", examples[index].expression);
+    const board = createEl("div", "factor-board");
+    stage.appendChild(board);
+
+    function draw() {
+      const example = examples[index];
+      task.querySelector("span").textContent = example.expression;
+      board.replaceChildren();
+      if (example.type === "十字相乘") {
+        board.innerHTML = `
+          <div class="factor-card">寻找 p、q</div>
+          <div class="factor-card">p + q = ${example.b}</div>
+          <div class="factor-card">pq = ${example.c}</div>
+          <div class="factor-card">${pGuess} + ${qGuess} = ${pGuess + qGuess}</div>
+          <div class="factor-card">${pGuess} × ${qGuess} = ${pGuess * qGuess}</div>
+        `;
+        const ok = pGuess + qGuess === example.b && pGuess * qGuess === example.c;
+        result.innerHTML = `<strong>${example.type}</strong><p>${ok ? `匹配成功：${example.expression} = (x + ${pGuess})(x + ${qGuess})。` : "继续调整 p、q，让它们的和等于一次项系数，积等于常数项。"}</p>`;
+      } else {
+        board.innerHTML = `<div class="factor-card wide">${example.expression}</div><div class="factor-arrow">→</div><div class="factor-card wide">${example.result}</div>`;
+        result.innerHTML = `<strong>${example.type}</strong><p>${example.expression} = ${example.result}。观察是否有公因式或平方差结构。</p>`;
+      }
+    }
+
+    controls.appendChild(makeRange("p", 1, 8, 1, pGuess, (value) => {
+      pGuess = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("q", 1, 8, 1, qGuess, (value) => {
+      qGuess = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("换一个例子", () => {
+      index = (index + 1) % examples.length;
+      pGuess = examples[index].p || 2;
+      qGuess = examples[index].q || 3;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      index = 0;
+      pGuess = 2;
+      qGuess = 3;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function gcd(a, b) {
+    let x = Math.abs(a);
+    let y = Math.abs(b);
+    while (y) {
+      const next = x % y;
+      x = y;
+      y = next;
+    }
+    return x || 1;
+  }
+
+  function renderFractionExpressionLab(model, container) {
+    let numerator = 6;
+    let denominator = 8;
+    let otherDenominator = 12;
+    let mode = "simplify";
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "分式约分通分实验台",
+      "分式有意义的前提是分母不为 0；约分和通分都不能改变分式的值。"
+    );
+    const task = addLabHeading(stage, "当前分式", `${numerator}/${denominator}`);
+    const board = createEl("div", "fraction-lab-board");
+    stage.appendChild(board);
+
+    function draw() {
+      task.querySelector("span").textContent = `${numerator}/${denominator}`;
+      const g = gcd(numerator, denominator);
+      const lcm = denominator * otherDenominator / gcd(denominator, otherDenominator);
+      board.innerHTML = `
+        <div class="fraction-card"><span>分子</span><strong>${numerator}</strong></div>
+        <div class="fraction-card"><span>分母</span><strong>${denominator}</strong></div>
+        <div class="fraction-card"><span>另一个分母</span><strong>${otherDenominator}</strong></div>
+      `;
+      if (mode === "simplify") {
+        result.innerHTML = `<strong>约分</strong><p>公因数是 ${g}，${numerator}/${denominator} = ${numerator / g}/${denominator / g}。</p><p>约去的是分子和分母的共同因数。</p>`;
+      } else if (mode === "common") {
+        result.innerHTML = `<strong>通分</strong><p>${denominator} 和 ${otherDenominator} 的公分母可以取 ${lcm}。</p><p>通分后分母相同，才方便比较或加减。</p>`;
+      } else {
+        const a = numerator * (lcm / denominator);
+        const b = 1 * (lcm / otherDenominator);
+        result.innerHTML = `<strong>分式加减</strong><p>${numerator}/${denominator} + 1/${otherDenominator} = ${a}/${lcm} + ${b}/${lcm} = ${a + b}/${lcm}。</p>`;
+      }
+    }
+
+    const modeButtons = [
+      makeButton("约分", () => {
+        mode = "simplify";
+        setActiveButton(modeButtons, 0);
+        draw();
+      }),
+      makeButton("通分", () => {
+        mode = "common";
+        setActiveButton(modeButtons, 1);
+        draw();
+      }),
+      makeButton("分式加减", () => {
+        mode = "add";
+        setActiveButton(modeButtons, 2);
+        draw();
+      })
+    ];
+    addButtonGroup(controls, modeButtons);
+    controls.appendChild(makeRange("分子", 1, 12, 1, numerator, (value) => {
+      numerator = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("分母", 2, 16, 1, denominator, (value) => {
+      denominator = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("另一个分母", 2, 16, 1, otherDenominator, (value) => {
+      otherDenominator = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      numerator = 6;
+      denominator = 8;
+      otherDenominator = 12;
+      mode = "simplify";
+      setActiveButton(modeButtons, 0);
+      draw();
+    }));
+    setActiveButton(modeButtons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderRadicalSimplifier(model, container) {
+    const examples = [
+      { n: 12, factor: 4, outside: 2, inside: 3 },
+      { n: 18, factor: 9, outside: 3, inside: 2 },
+      { n: 20, factor: 4, outside: 2, inside: 5 },
+      { n: 45, factor: 9, outside: 3, inside: 5 }
+    ];
+    let index = 0;
+    let step = 0;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "二次根式化简实验台",
+      "把被开方数拆成完全平方数 × 另一个数，就能把完全平方因数提出根号。"
+    );
+    const task = addLabHeading(stage, "当前根式", `√${examples[index].n}`);
+    const svg = createSvg({ viewBox: "0 0 640 180", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      const example = examples[index];
+      task.querySelector("span").textContent = `√${example.n}`;
+      svg.replaceChildren();
+      renderAxis(svg, 0, 8, 88);
+      const original = Math.sqrt(example.n);
+      const simplified = example.outside * Math.sqrt(example.inside);
+      const x1 = axisPosition(original, 0, 8);
+      const x2 = axisPosition(simplified, 0, 8);
+      svg.appendChild(createSvgEl("circle", { cx: x1, cy: 88, r: 9, class: "custom-point" }));
+      svg.appendChild(createSvgEl("circle", { cx: x2, cy: 88, r: 5, class: "custom-point warm" }));
+      const steps = [
+        `√${example.n}`,
+        `= √(${example.factor} × ${example.inside})`,
+        `= √${example.factor} × √${example.inside}`,
+        `= ${example.outside}√${example.inside}`
+      ];
+      result.innerHTML = `<strong>第 ${step + 1} 步</strong><p>${steps.slice(0, step + 1).join("<br>")}</p><p>数轴上 √${example.n} 和 ${example.outside}√${example.inside} 的位置相同，说明数值相等。</p>`;
+    }
+
+    controls.appendChild(makeButton("选择完全平方因数", () => {
+      step = Math.max(step, 1);
+      draw();
+    }));
+    controls.appendChild(makeButton("下一步", () => {
+      step = Math.min(3, step + 1);
+      draw();
+    }));
+    controls.appendChild(makeButton("换一个例子", () => {
+      index = (index + 1) % examples.length;
+      step = 0;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      index = 0;
+      step = 0;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderParallelogramShearLab(model, container) {
+    let base = 8;
+    let height = 5;
+    let shear = 2;
+    let cutMode = false;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "平行四边形剪拼实验台",
+      "平行四边形可以剪下一块移到另一侧，拼成长方形，所以面积 = 底 × 高。"
+    );
+    addLabHeading(stage, "当前任务", "拖动倾斜程度，观察底和高不变时面积保持不变。");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      const sx = 34;
+      const w = base * sx;
+      const h = height * sx;
+      const x = 160;
+      const y = 245 - h;
+      const offset = shear * 22;
+      const points = `${x + offset},${y} ${x + offset + w},${y} ${x + w},${y + h} ${x},${y + h}`;
+      svg.appendChild(createSvgEl("polygon", { points, class: "shape-fill" }));
+      svg.appendChild(createSvgEl("polygon", { points, class: "shape-outline" }));
+      svg.appendChild(createSvgEl("line", { x1: x + offset, y1: y, x2: x + offset, y2: y + h, class: "measure-line dashed" }));
+      if (cutMode) {
+        svg.appendChild(createSvgEl("rect", { x: x + w + 42, y, width: w, height: h, class: "shape-fill warm-fill" }));
+        svg.appendChild(createSvgEl("rect", { x: x + w + 42, y, width: w, height: h, class: "shape-outline" }));
+        svg.appendChild(createSvgEl("text", { x: x + w + 52, y: y - 10, class: "custom-svg-label" }, "剪拼成长方形"));
+      }
+      svg.appendChild(createSvgEl("text", { x, y: 282, class: "custom-svg-label" }, `底=${base}`));
+      svg.appendChild(createSvgEl("text", { x: x + offset + 10, y: y + h / 2, class: "custom-svg-label" }, `高=${height}`));
+      result.innerHTML = `<strong>实时结果</strong><p>面积 S = 底 × 高 = ${base} × ${height} = ${base * height}。倾斜改变形状，但底和高不变时面积不变。</p><p>对角线互相平分：两条对角线的交点是各自中点。</p>`;
+    }
+
+    controls.appendChild(makeRange("底", 4, 10, 1, base, (value) => {
+      base = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("高", 3, 8, 1, height, (value) => {
+      height = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("倾斜程度", 0, 4, 1, shear, (value) => {
+      shear = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("演示剪拼", () => {
+      cutMode = !cutMode;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      base = 8;
+      height = 5;
+      shear = 2;
+      cutMode = false;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderRectangleMeasureLab(model, container) {
+    let length = 8;
+    let width = 4;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "矩形测量实验台",
+      "矩形对边相等，四个角都是直角；对角线相等且互相平分。"
+    );
+    addLabHeading(stage, "当前任务", "调整长和宽，比较周长、面积和对角线的变化。");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      const sx = 34;
+      const w = length * sx;
+      const h = width * sx;
+      const x = 320 - w / 2;
+      const y = 160 - h / 2;
+      svg.appendChild(createSvgEl("rect", { x, y, width: w, height: h, class: "shape-fill" }));
+      svg.appendChild(createSvgEl("rect", { x, y, width: w, height: h, class: "shape-outline" }));
+      svg.appendChild(createSvgEl("line", { x1: x, y1: y, x2: x + w, y2: y + h, class: "measure-line" }));
+      svg.appendChild(createSvgEl("line", { x1: x + w, y1: y, x2: x, y2: y + h, class: "measure-line dashed" }));
+      svg.appendChild(createSvgEl("circle", { cx: x + w / 2, cy: y + h / 2, r: 7, class: "custom-point warm" }));
+      svg.appendChild(createSvgEl("text", { x: x + w / 2, y: y - 10, class: "custom-svg-label", "text-anchor": "middle" }, `长=${length}`));
+      svg.appendChild(createSvgEl("text", { x: x + w + 8, y: y + h / 2, class: "custom-svg-label" }, `宽=${width}`));
+      const area = length * width;
+      const perimeter = 2 * (length + width);
+      const diagonal = Math.sqrt(length * length + width * width);
+      result.innerHTML = `<strong>实时结果</strong><p>周长=${perimeter}，面积=${area}，对角线≈${round(diagonal)}。</p><p>只改变长或宽时，周长线性变化，面积按乘积变化。</p>`;
+    }
+
+    controls.appendChild(makeRange("长", 3, 10, 1, length, (value) => {
+      length = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("宽", 2, 8, 1, width, (value) => {
+      width = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      length = 8;
+      width = 4;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderRhombusDiagonalLab(model, container) {
+    let d1 = 8;
+    let d2 = 6;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "菱形对角线实验台",
+      "菱形四条边相等，对角线互相垂直且互相平分。"
+    );
+    addLabHeading(stage, "当前任务", "调整两条对角线，观察面积公式 S = d₁ × d₂ ÷ 2。");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      const cx = 320;
+      const cy = 160;
+      const rx = d1 * 24;
+      const ry = d2 * 24;
+      const points = `${cx},${cy - ry / 2} ${cx + rx / 2},${cy} ${cx},${cy + ry / 2} ${cx - rx / 2},${cy}`;
+      svg.appendChild(createSvgEl("polygon", { points, class: "shape-fill" }));
+      svg.appendChild(createSvgEl("polygon", { points, class: "shape-outline" }));
+      svg.appendChild(createSvgEl("line", { x1: cx - rx / 2, y1: cy, x2: cx + rx / 2, y2: cy, class: "measure-line" }));
+      svg.appendChild(createSvgEl("line", { x1: cx, y1: cy - ry / 2, x2: cx, y2: cy + ry / 2, class: "measure-line dashed" }));
+      svg.appendChild(createSvgEl("text", { x: cx, y: cy - ry / 2 - 10, class: "custom-svg-label", "text-anchor": "middle" }, `d₂=${d2}`));
+      svg.appendChild(createSvgEl("text", { x: cx + rx / 2 + 8, y: cy, class: "custom-svg-label" }, `d₁=${d1}`));
+      const side = Math.sqrt((d1 / 2) ** 2 + (d2 / 2) ** 2);
+      result.innerHTML = `<strong>实时结果</strong><p>面积 = ${d1} × ${d2} ÷ 2 = ${round(d1 * d2 / 2)}。四条边都约为 ${round(side)}。</p><p>两条对角线把菱形分成 4 个全等直角三角形。</p>`;
+    }
+
+    controls.appendChild(makeRange("对角线 d₁", 4, 12, 1, d1, (value) => {
+      d1 = value;
+      draw();
+    }));
+    controls.appendChild(makeRange("对角线 d₂", 4, 12, 1, d2, (value) => {
+      d2 = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      d1 = 8;
+      d2 = 6;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderSquarePropertiesLab(model, container) {
+    let side = 5;
+    let activeProperty = "矩形性质";
+    const properties = ["矩形性质", "菱形性质", "平行四边形性质"];
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "正方形性质实验台",
+      "正方形既是特殊矩形，也是特殊菱形，还是特殊平行四边形。"
+    );
+    addLabHeading(stage, "当前任务", "调整边长，并点击性质卡片进行分类。");
+    const svg = createSvg({ viewBox: "0 0 640 300", class: "custom-svg lab-svg" });
+    const propertyBoard = createEl("div", "property-board");
+    stage.append(svg, propertyBoard);
+
+    function draw() {
+      svg.replaceChildren();
+      propertyBoard.replaceChildren();
+      const s = side * 34;
+      const x = 320 - s / 2;
+      const y = 150 - s / 2;
+      svg.appendChild(createSvgEl("rect", { x, y, width: s, height: s, class: "shape-fill" }));
+      svg.appendChild(createSvgEl("rect", { x, y, width: s, height: s, class: "shape-outline" }));
+      svg.appendChild(createSvgEl("line", { x1: x, y1: y, x2: x + s, y2: y + s, class: "measure-line" }));
+      svg.appendChild(createSvgEl("line", { x1: x + s, y1: y, x2: x, y2: y + s, class: "measure-line dashed" }));
+      properties.forEach((property) => {
+        const card = createEl("button", `property-card${property === activeProperty ? " is-active" : ""}`, property);
+        card.type = "button";
+        card.addEventListener("click", () => {
+          activeProperty = property;
+          draw();
+        });
+        propertyBoard.appendChild(card);
+      });
+      const diagonal = side * Math.sqrt(2);
+      result.innerHTML = `<strong>${activeProperty}</strong><p>边长=${side}，周长=${side * 4}，面积=${side * side}，对角线≈${round(diagonal)}。</p><p>${activeProperty === "矩形性质" ? "四个角都是直角，对角线相等。" : activeProperty === "菱形性质" ? "四条边相等，对角线互相垂直。" : "两组对边分别平行。"}</p>`;
+    }
+
+    controls.appendChild(makeRange("边长", 2, 9, 1, side, (value) => {
+      side = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      side = 5;
+      activeProperty = "矩形性质";
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function statistics(values) {
+    const sorted = [...values].sort((a, b) => a - b);
+    const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+    const median = sorted.length % 2 ? sorted[(sorted.length - 1) / 2] : (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2;
+    const range = Math.max(...values) - Math.min(...values);
+    const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+    const counts = new Map();
+    values.forEach((value) => counts.set(value, (counts.get(value) || 0) + 1));
+    const mode = [...counts.entries()].sort((a, b) => b[1] - a[1])[0][0];
+    return { mean, median, mode, range, variance };
+  }
+
+  function renderDataStatisticsLab(model, container) {
+    let values = [8, 10, 11, 12, 13, 14, 16];
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "数据分析实验台",
+      "平均数容易受异常值影响；中位数更关注排序后中间位置。"
+    );
+    addLabHeading(stage, "当前任务", "修改数据或加入异常值，观察统计量如何变化。");
+    const chart = createEl("div", "stat-dot-chart");
+    stage.appendChild(chart);
+
+    function draw() {
+      chart.replaceChildren();
+      const max = Math.max(...values);
+      values.forEach((value) => {
+        const dot = createEl("span", "stat-dot", String(value));
+        dot.style.height = `${Math.max(26, (value / max) * 150)}px`;
+        chart.appendChild(dot);
+      });
+      const s = statistics(values);
+      result.innerHTML = `<strong>实时结果</strong><p>数据：${values.join("，")}</p><p>平均数=${round(s.mean)}，中位数=${round(s.median)}，众数=${s.mode}，极差=${s.range}，方差=${round(s.variance)}。</p>`;
+    }
+
+    controls.appendChild(makeButton("随机修改一项", () => {
+      const index = Math.floor(Math.random() * values.length);
+      values[index] = Math.floor(Math.random() * 14) + 5;
+      draw();
+    }));
+    controls.appendChild(makeButton("增加异常值 30", () => {
+      if (!values.includes(30)) {
+        values.push(30);
+      }
+      draw();
+    }));
+    controls.appendChild(makeButton("删除异常值", () => {
+      values = values.filter((value) => value !== 30);
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      values = [8, 10, 11, 12, 13, 14, 16];
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderQuadraticRootLab(model, container) {
+    const examples = [
+      { b: 5, c: 6, roots: [-2, -3], factors: "(x + 2)(x + 3)" },
+      { b: -5, c: 6, roots: [2, 3], factors: "(x - 2)(x - 3)" },
+      { b: 2, c: 1, roots: [-1, -1], factors: "(x + 1)²" }
+    ];
+    let index = 0;
+    let method = "factor";
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "一元二次方程求根实验台",
+      "二次方程的根就是让等式左边等于 0 的 x 值，也对应图像与 x 轴的交点。"
+    );
+    const task = addLabHeading(stage, "当前方程", "");
+    const svg = createSvg({ viewBox: "0 0 640 260", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      const ex = examples[index];
+      task.querySelector("span").textContent = `x² ${ex.b >= 0 ? "+" : "-"} ${Math.abs(ex.b)}x ${ex.c >= 0 ? "+" : "-"} ${Math.abs(ex.c)} = 0`;
+      svg.replaceChildren();
+      renderAxis(svg, -6, 6, 132);
+      ex.roots.forEach((root) => {
+        const x = axisPosition(root, -6, 6);
+        svg.appendChild(createSvgEl("circle", { cx: x, cy: 132, r: 9, class: "custom-point warm" }));
+        svg.appendChild(createSvgEl("text", { x, y: 92, class: "custom-svg-label", "text-anchor": "middle" }, `x=${root}`));
+      });
+      const delta = ex.b * ex.b - 4 * ex.c;
+      const formulaRoots = `${round((-ex.b + Math.sqrt(delta)) / 2)}，${round((-ex.b - Math.sqrt(delta)) / 2)}`;
+      result.innerHTML = method === "factor"
+        ? `<strong>因式分解法</strong><p>${ex.factors}=0，所以根是 x=${ex.roots.join(" 和 x=")}。</p><p>若两个因式的乘积为 0，至少有一个因式为 0。</p>`
+        : `<strong>公式法</strong><p>Δ=b²-4ac=${delta}，${delta > 0 ? "有两个不相等实根" : delta === 0 ? "有两个相等实根" : "没有实数根"}。</p><p>公式计算根：${formulaRoots}。</p>`;
+    }
+
+    const methodButtons = [
+      makeButton("因式分解法", () => {
+        method = "factor";
+        setActiveButton(methodButtons, 0);
+        draw();
+      }),
+      makeButton("公式法", () => {
+        method = "formula";
+        setActiveButton(methodButtons, 1);
+        draw();
+      })
+    ];
+    addButtonGroup(controls, methodButtons);
+    controls.appendChild(makeButton("换一个例子", () => {
+      index = (index + 1) % examples.length;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      index = 0;
+      method = "factor";
+      setActiveButton(methodButtons, 0);
+      draw();
+    }));
+    setActiveButton(methodButtons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderInverseVariationLab(model, container) {
+    let k = 6;
+    let xValue = 2;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "反比例函数变化实验台",
+      "反比例函数 y=k/x 中，x 不能为 0，并且每个点都满足 x × y = k。"
+    );
+    addLabHeading(stage, "当前任务", "调整 k 和 x，观察 y、乘积关系和图像所在象限。");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function sx(value) {
+      return 320 + value * 34;
+    }
+
+    function sy(value) {
+      return 160 - value * 24;
+    }
+
+    function pathFor(sign) {
+      let path = "";
+      for (let x = sign < 0 ? -8 : 0.5; sign < 0 ? x <= -0.5 : x <= 8; x += 0.25) {
+        const y = k / x;
+        if (Math.abs(y) > 8) continue;
+        path += path ? ` L ${sx(x)} ${sy(y)}` : `M ${sx(x)} ${sy(y)}`;
+      }
+      return path;
+    }
+
+    function draw() {
+      if (xValue === 0) xValue = 1;
+      const y = k / xValue;
+      svg.replaceChildren();
+      svg.appendChild(createSvgEl("line", { x1: 40, y1: 160, x2: 600, y2: 160, class: "axis-line" }));
+      svg.appendChild(createSvgEl("line", { x1: 320, y1: 32, x2: 320, y2: 292, class: "axis-line" }));
+      svg.appendChild(createSvgEl("path", { d: pathFor(-1), class: "curve-line" }));
+      svg.appendChild(createSvgEl("path", { d: pathFor(1), class: "curve-line" }));
+      svg.appendChild(createSvgEl("circle", { cx: sx(xValue), cy: sy(y), r: 9, class: "custom-point warm" }));
+      result.innerHTML = `<strong>实时结果</strong><p>y = ${k} / ${xValue} = ${round(y)}，所以 x × y = ${xValue} × ${round(y)} ≈ ${round(xValue * y)}。</p><p>k ${k > 0 ? "大于 0，图像在第一、三象限" : "小于 0，图像在第二、四象限"}；x=0 时分母为 0，函数无意义。</p>`;
+    }
+
+    controls.appendChild(makeRange("k", -8, 8, 1, k, (value) => {
+      k = value === 0 ? 1 : value;
+      draw();
+    }));
+    controls.appendChild(makeRange("x", -6, 6, 1, xValue, (value) => {
+      xValue = value === 0 ? 1 : value;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      k = 6;
+      xValue = 2;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderSimilarityScaleLab(model, container) {
+    let scale = 1.5;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "相似三角形缩放实验台",
+      "相似三角形对应角相等，对应边成比例；周长比等于相似比，面积比等于相似比的平方。"
+    );
+    addLabHeading(stage, "当前任务", "拖动相似比 k，观察对应边、周长和面积如何变化。");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      const small = "80,250 220,250 140,120";
+      const x = 330;
+      const w = 140 * scale;
+      const h = 130 * scale;
+      const big = `${x},250 ${x + w},250 ${x + 60 * scale},${250 - h}`;
+      svg.appendChild(createSvgEl("polygon", { points: small, class: "shape-fill" }));
+      svg.appendChild(createSvgEl("polygon", { points: small, class: "shape-outline" }));
+      svg.appendChild(createSvgEl("polygon", { points: big, class: "shape-fill warm-fill" }));
+      svg.appendChild(createSvgEl("polygon", { points: big, class: "shape-outline" }));
+      svg.appendChild(createSvgEl("text", { x: 86, y: 92, class: "custom-svg-label" }, "△ABC"));
+      svg.appendChild(createSvgEl("text", { x, y: 70, class: "custom-svg-label" }, "△A'B'C'"));
+      result.innerHTML = `<strong>实时结果</strong><p>相似比 k=${round(scale)}，对应边比例都是 ${round(scale)}。</p><p>周长比=${round(scale)}，面积比=k²=${round(scale * scale)}；对应角保持相等。</p>`;
+    }
+
+    controls.appendChild(makeRange("相似比 k", 0.8, 2.4, 0.1, scale, (value) => {
+      scale = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      scale = 1.5;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderRightTriangleRatioLab(model, container) {
+    let angle = 35;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "锐角三角函数实验台",
+      "sin、cos、tan 都是直角三角形中边长的比值，角度改变时比值会随之改变。"
+    );
+    addLabHeading(stage, "当前任务", "拖动锐角 A，观察对边、邻边、斜边和三个比值。");
+    const svg = createSvg({ viewBox: "0 0 640 320", class: "custom-svg lab-svg" });
+    stage.appendChild(svg);
+
+    function draw() {
+      svg.replaceChildren();
+      const ax = 130;
+      const ay = 250;
+      const adjacent = 260;
+      const rad = angle * Math.PI / 180;
+      const opposite = Math.tan(rad) * adjacent;
+      const bx = ax + adjacent;
+      const by = ay;
+      const cx = bx;
+      const cy = ay - opposite;
+      const hyp = Math.sqrt(adjacent ** 2 + opposite ** 2);
+      svg.appendChild(createSvgEl("polygon", { points: `${ax},${ay} ${bx},${by} ${cx},${cy}`, class: "shape-fill" }));
+      svg.appendChild(createSvgEl("polygon", { points: `${ax},${ay} ${bx},${by} ${cx},${cy}`, class: "shape-outline" }));
+      svg.appendChild(createSvgEl("text", { x: ax + adjacent / 2, y: ay + 28, class: "custom-svg-label", "text-anchor": "middle" }, "邻边"));
+      svg.appendChild(createSvgEl("text", { x: bx + 10, y: (by + cy) / 2, class: "custom-svg-label" }, "对边"));
+      svg.appendChild(createSvgEl("text", { x: (ax + cx) / 2 - 20, y: (ay + cy) / 2 - 12, class: "custom-svg-label" }, "斜边"));
+      svg.appendChild(createSvgEl("text", { x: ax + 38, y: ay - 16, class: "custom-svg-label" }, `A=${angle}°`));
+      result.innerHTML = `<strong>实时结果</strong><p>对边≈${round(opposite / 40)}，邻边≈${round(adjacent / 40)}，斜边≈${round(hyp / 40)}。</p><p>sinA≈${round(Math.sin(rad))}，cosA≈${round(Math.cos(rad))}，tanA≈${round(Math.tan(rad))}。</p>`;
+    }
+
+    controls.appendChild(makeRange("锐角 A", 15, 70, 1, angle, (value) => {
+      angle = value;
+      draw();
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      angle = 35;
+      draw();
+    }));
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderThreeViewLab(model, container) {
+    const views = {
+      front: { label: "主视图", shape: "长方形：看长和高" },
+      left: { label: "左视图", shape: "窄长方形：看宽和高" },
+      top: { label: "俯视图", shape: "长方形：看长和宽" }
+    };
+    let view = "front";
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "三视图观察实验台",
+      "从不同方向观察同一个立体图形，会得到不同的二维投影。"
+    );
+    addLabHeading(stage, "当前任务", "点击观察方向，匹配主视图、左视图和俯视图。");
+    const scene = createEl("div", "three-view-scene");
+    const projection = createEl("div", "projection-card");
+    stage.append(scene, projection);
+
+    function draw() {
+      scene.innerHTML = `
+        <div class="cube-face front-face"></div>
+        <div class="cube-face side-face"></div>
+        <div class="cube-face top-face"></div>
+      `;
+      projection.textContent = views[view].label;
+      projection.className = `projection-card view-${view}`;
+      result.innerHTML = `<strong>${views[view].label}</strong><p>${views[view].shape}。</p><p>练习：先想象眼睛站在哪个方向，再把看到的面画成平面图。</p>`;
+    }
+
+    const buttons = Object.entries(views).map(([key, item], index) => makeButton(item.label, () => {
+      view = key;
+      setActiveButton(buttons, index);
+      draw();
+    }));
+    addButtonGroup(controls, buttons);
+    controls.appendChild(makeButton("选择正确视图", () => {
+      result.innerHTML += "<p>如果从正前方看，只能看到物体的长和高，这就是主视图。</p>";
+    }));
+    controls.appendChild(makeButton("重置", () => {
+      view = "front";
+      setActiveButton(buttons, 0);
+      draw();
+    }));
+    setActiveButton(buttons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
+  function renderProbabilitySimulatorLab(model, container) {
+    const modes = ["摸球实验", "转盘实验", "抛硬币实验"];
+    let modeIndex = 0;
+    let red = 4;
+    let blue = 6;
+    let trials = 0;
+    let success = 0;
+    const { wrap, stage, controls, result } = buildShell(
+      model,
+      "概率模拟实验台",
+      "实验次数越多，实验频率通常越接近理论概率，但每次实验结果仍有随机性。"
+    );
+    addLabHeading(stage, "当前任务", "选择实验类型，比较理论概率和实验频率。");
+    const board = createEl("div", "probability-board");
+    stage.appendChild(board);
+
+    function theoreticalProbability() {
+      if (modeIndex === 0) return red / (red + blue);
+      if (modeIndex === 1) return red / (red + blue);
+      return 0.5;
+    }
+
+    function simulate(times) {
+      const p = theoreticalProbability();
+      for (let i = 0; i < times; i += 1) {
+        trials += 1;
+        if (Math.random() < p) {
+          success += 1;
+        }
+      }
+      draw();
+    }
+
+    function draw() {
+      const p = theoreticalProbability();
+      const frequency = trials ? success / trials : 0;
+      board.replaceChildren();
+      if (modeIndex === 0) {
+        for (let i = 0; i < red; i += 1) board.appendChild(createEl("span", "ball red-ball"));
+        for (let i = 0; i < blue; i += 1) board.appendChild(createEl("span", "ball blue-ball"));
+      } else if (modeIndex === 1) {
+        const wheel = createEl("div", "probability-wheel");
+        wheel.style.background = `conic-gradient(#e85d75 0deg ${p * 360}deg, #2e86de ${p * 360}deg 360deg)`;
+        board.appendChild(wheel);
+      } else {
+        board.append(createEl("div", "coin-card", "正面"), createEl("div", "coin-card", "反面"));
+      }
+      const bar = createEl("div", "frequency-bar");
+      bar.innerHTML = `<span style="width:${Math.min(100, frequency * 100)}%"></span>`;
+      board.appendChild(bar);
+      result.innerHTML = `<strong>${modes[modeIndex]}</strong><p>理论概率≈${round(p)}；实验 ${trials} 次，目标结果 ${success} 次，实验频率≈${round(frequency)}。</p>`;
+    }
+
+    const modeButtons = modes.map((label, index) => makeButton(label, () => {
+      modeIndex = index;
+      trials = 0;
+      success = 0;
+      setActiveButton(modeButtons, index);
+      draw();
+    }));
+    addButtonGroup(controls, modeButtons);
+    controls.appendChild(makeRange("红球 / 红色区域", 1, 10, 1, red, (value) => {
+      red = value;
+      trials = 0;
+      success = 0;
+      draw();
+    }));
+    controls.appendChild(makeRange("蓝球 / 蓝色区域", 1, 10, 1, blue, (value) => {
+      blue = value;
+      trials = 0;
+      success = 0;
+      draw();
+    }));
+    addButtonGroup(controls, [
+      makeButton("模拟 1 次", () => simulate(1)),
+      makeButton("模拟 10 次", () => simulate(10)),
+      makeButton("模拟 100 次", () => simulate(100)),
+      makeButton("重置", () => {
+        trials = 0;
+        success = 0;
+        draw();
+      })
+    ]);
+    setActiveButton(modeButtons, 0);
+    draw();
+    container.appendChild(wrap);
+  }
+
   const renderers = {
+    "rational-number-lab": renderRationalNumberLab,
+    "geometry-basics-builder": renderGeometryBasicsBuilder,
+    "real-number-classifier": renderRealNumberClassifier,
+    "system-elimination-lab": renderSystemEliminationLab,
+    "inequality-number-line": renderInequalityNumberLineLab,
+    "survey-chart-lab": renderSurveyChartLab,
+    "congruence-test-lab": renderCongruenceTestLab,
+    "symmetry-mirror-lab": renderSymmetryMirrorLab,
+    "isosceles-triangle-lab": renderIsoscelesTriangleLab,
+    "polynomial-area-multiply": renderPolynomialAreaMultiply,
+    "multiplication-formula-area": renderMultiplicationFormulaAreaLab,
+    "factorization-puzzle": renderFactorizationPuzzle,
+    "fraction-expression-lab": renderFractionExpressionLab,
+    "radical-simplifier": renderRadicalSimplifier,
+    "parallelogram-shear-lab": renderParallelogramShearLab,
+    "rectangle-measure-lab": renderRectangleMeasureLab,
+    "rhombus-diagonal-lab": renderRhombusDiagonalLab,
+    "square-properties-lab": renderSquarePropertiesLab,
+    "data-statistics-lab": renderDataStatisticsLab,
+    "quadratic-root-lab": renderQuadraticRootLab,
+    "inverse-variation-lab": renderInverseVariationLab,
+    "similarity-scale-lab": renderSimilarityScaleLab,
+    "right-triangle-ratio-lab": renderRightTriangleRatioLab,
+    "three-view-lab": renderThreeViewLab,
+    "probability-simulator-lab": renderProbabilitySimulatorLab,
     "number-line": renderNumberLine,
     "equation-balance": renderEquationBalance,
     "equation-step-balance": renderEquationStepBalance,

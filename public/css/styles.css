@@ -845,6 +845,317 @@ h2 {
   margin: 0;
 }
 
+.lab-task {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+}
+
+.lab-task strong {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.lab-task span {
+  color: var(--blue-900);
+  font-size: 1.08rem;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+}
+
+.lab-button-row {
+  display: grid;
+  gap: 8px;
+}
+
+.lab-svg {
+  min-height: 190px;
+}
+
+.warm-fill {
+  fill: rgba(240, 180, 41, 0.22);
+}
+
+.big-number-card {
+  display: grid;
+  min-height: 82px;
+  place-items: center;
+  border: 2px solid #9ac1ef;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--blue-900);
+  font-size: 2.1rem;
+  font-weight: 900;
+}
+
+.set-relation,
+.equation-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.set-relation span {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #ffffff;
+  color: var(--blue-700);
+  font-size: 0.84rem;
+  font-weight: 800;
+}
+
+.survey-board {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(120px, 0.8fr) minmax(110px, 0.6fr);
+  gap: 10px;
+  align-items: center;
+}
+
+.survey-table,
+.survey-bars,
+.fraction-lab-board,
+.factor-board,
+.property-board,
+.probability-board {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.survey-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 8px;
+  border-bottom: 1px solid var(--line);
+  padding: 6px 0;
+}
+
+.survey-row:last-child {
+  border-bottom: 0;
+}
+
+.survey-row span,
+.survey-row em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.82rem;
+}
+
+.survey-row strong {
+  color: var(--blue-900);
+}
+
+.survey-bars {
+  display: flex;
+  min-height: 160px;
+  align-items: end;
+  justify-content: center;
+  gap: 7px;
+}
+
+.survey-bar {
+  display: grid;
+  width: 34px;
+  align-items: start;
+  justify-content: center;
+  border-radius: 8px 8px 3px 3px;
+  padding-top: 6px;
+  color: #ffffff;
+  font-size: 0.72rem;
+  font-weight: 900;
+  writing-mode: vertical-rl;
+}
+
+.survey-pie,
+.probability-wheel {
+  width: 112px;
+  height: 112px;
+  justify-self: center;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+.poly-area-grid,
+.formula-area-board {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 8px;
+  min-height: 210px;
+  padding: 54px 10px 10px;
+}
+
+.area-cell {
+  display: grid;
+  min-height: 74px;
+  place-items: center;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  color: var(--blue-900);
+  background: #ffffff;
+  font-weight: 900;
+  text-align: center;
+}
+
+.area-x2 {
+  background: #dcecff;
+  border-color: #9ac1ef;
+}
+
+.area-x {
+  background: #fff4d8;
+  border-color: #f3d59a;
+}
+
+.area-one {
+  background: #effbf3;
+  border-color: #85d8a0;
+}
+
+.factor-board,
+.fraction-lab-board {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  align-items: center;
+}
+
+.factor-card,
+.fraction-card {
+  display: grid;
+  min-height: 76px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
+  background: var(--blue-050);
+  color: var(--blue-900);
+  font-weight: 900;
+  text-align: center;
+}
+
+.factor-card.wide {
+  grid-column: span 1;
+}
+
+.factor-arrow {
+  color: var(--blue-700);
+  font-size: 1.7rem;
+  font-weight: 900;
+  text-align: center;
+}
+
+.fraction-card span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.fraction-card strong {
+  font-size: 1.45rem;
+}
+
+.property-board {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.property-card {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 12px;
+  color: var(--blue-700);
+  background: #ffffff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.property-card.is-active {
+  color: #ffffff;
+  background: var(--blue-700);
+  border-color: var(--blue-700);
+}
+
+.stat-dot-chart {
+  display: flex;
+  min-height: 190px;
+  align-items: end;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 48px 12px 12px;
+  background: #ffffff;
+}
+
+.stat-dot {
+  display: flex;
+  width: 34px;
+  align-items: start;
+  justify-content: center;
+  border-radius: 8px 8px 3px 3px;
+  padding-top: 6px;
+  color: #ffffff;
+  background: var(--blue-700);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.three-view-scene {
+  position: relative;
+  width: min(230px, 66vw);
+  height: 178px;
+  margin: 46px auto 10px;
+}
+
+.probability-board {
+  display: flex;
+  min-height: 190px;
+  align-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  padding-top: 48px;
+}
+
+.blue-ball {
+  background: #2e86de;
+}
+
+.coin-card {
+  display: grid;
+  width: 84px;
+  height: 84px;
+  place-items: center;
+  border: 2px solid #f3d59a;
+  border-radius: 50%;
+  color: var(--blue-900);
+  background: #fff4d8;
+  font-weight: 900;
+}
+
+.frequency-bar {
+  width: 100%;
+  height: 18px;
+  border-radius: 999px;
+  background: #e3edf9;
+  overflow: hidden;
+}
+
+.frequency-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--blue-700);
+}
+
 .fraction-bars {
   display: flex;
   min-height: 185px;
@@ -1517,6 +1828,58 @@ a:focus-visible {
 
   .equation-block.x-block {
     min-width: 34px;
+  }
+
+  .lab-task {
+    padding: 9px 10px;
+  }
+
+  .lab-task span {
+    font-size: 1rem;
+  }
+
+  .survey-board,
+  .factor-board,
+  .fraction-lab-board {
+    grid-template-columns: 1fr;
+  }
+
+  .survey-bars,
+  .stat-dot-chart,
+  .probability-board {
+    min-height: 150px;
+  }
+
+  .survey-pie,
+  .probability-wheel {
+    width: 96px;
+    height: 96px;
+  }
+
+  .poly-area-grid,
+  .formula-area-board {
+    min-height: 180px;
+    padding: 46px 8px 8px;
+  }
+
+  .area-cell {
+    min-height: 58px;
+    font-size: 0.9rem;
+  }
+
+  .stat-dot {
+    width: 28px;
+    font-size: 0.76rem;
+  }
+
+  .three-view-scene {
+    width: min(210px, 72vw);
+    height: 160px;
+  }
+
+  .property-card {
+    min-height: 36px;
+    font-size: 0.88rem;
   }
 
   .custom-controls {

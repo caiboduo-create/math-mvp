@@ -19,16 +19,28 @@
       </div>
     </header>
 
-    <main class="shell page-main model-grid">
-      <section class="card visual-card">
-        <div class="card-heading">
-          <h2>知识点概览</h2>
-          <p id="modelDescription"></p>
-        </div>
-        <div class="overview-panel" id="overviewPanel"></div>
-      </section>
+    <main class="shell page-main model-page">
+      <div class="detail-layout">
+        <div class="left-column">
+          <section class="card visual-card">
+            <div class="card-heading">
+              <h2>知识点概览</h2>
+              <p id="modelDescription"></p>
+            </div>
+            <div class="overview-panel" id="overviewPanel"></div>
+          </section>
 
-      <div class="side-stack">
+          <section class="card interactive-card" id="interactive-section">
+            <div class="card-heading">
+              <h2 id="interactive-title">互动探索</h2>
+              <p id="interactive-description">拖动点、滑块或参数，观察图形和公式变化。</p>
+            </div>
+            <div id="interactive-container" class="interactive-container"></div>
+            <div id="interactive-fallback" class="content-box muted-box" hidden></div>
+          </section>
+        </div>
+
+        <aside class="right-column">
         <section class="card controls-card">
           <div class="card-heading">
             <h2>核心公式与例题</h2>
@@ -61,16 +73,8 @@
           </div>
           <button class="secondary-button" id="resetStatsButton" type="button">重置统计</button>
         </section>
+        </aside>
       </div>
-
-      <section class="card interactive-card" id="interactive-section">
-        <div class="card-heading">
-          <h2 id="interactive-title">互动探索</h2>
-          <p id="interactive-description">拖动点、滑块或参数，观察图形和公式变化。</p>
-        </div>
-        <div id="interactive-container" class="interactive-container"></div>
-        <div id="interactive-fallback" class="content-box muted-box" hidden></div>
-      </section>
 
       <section class="card practice-card">
         <div class="card-heading">

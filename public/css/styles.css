@@ -253,16 +253,22 @@ h2 {
   font-weight: 700;
 }
 
-.model-grid {
+.model-page {
   display: grid;
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
-  grid-template-areas:
-    "visual side"
-    "interactive interactive"
-    "practice practice"
-    "result result"
-    "ask ask";
+  gap: 16px;
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
   align-items: start;
+  gap: 20px;
+}
+
+.left-column,
+.right-column {
+  display: flex;
+  flex-direction: column;
   gap: 16px;
 }
 
@@ -270,31 +276,20 @@ h2 {
   padding: 18px;
 }
 
-.visual-card {
-  grid-area: visual;
-}
-
-.side-stack {
-  display: grid;
-  grid-area: side;
-  align-content: start;
-  gap: 16px;
-}
-
-.practice-card {
-  grid-area: practice;
-}
-
-.interactive-card {
-  grid-area: interactive;
-}
-
-.result-card {
-  grid-area: result;
-}
-
+.visual-card,
+.interactive-card,
+.controls-card,
+.stats-card,
+.practice-card,
+.result-card,
 .ask-card {
-  grid-area: ask;
+  min-height: 0;
+}
+
+.practice-card,
+.result-card,
+.ask-card {
+  width: 100%;
 }
 
 .card-heading {
@@ -344,8 +339,8 @@ h2 {
 
 .custom-interactive {
   display: grid;
-  gap: 10px;
-  padding: 10px;
+  gap: 8px;
+  padding: 8px;
 }
 
 .custom-interactive-layout {
@@ -367,8 +362,8 @@ h2 {
 
 .custom-stage {
   position: relative;
-  min-height: 220px;
-  padding: 12px;
+  min-height: 200px;
+  padding: 10px;
   overflow: hidden;
 }
 
@@ -388,8 +383,8 @@ h2 {
 .custom-controls {
   display: grid;
   align-content: start;
-  gap: 10px;
-  padding: 12px;
+  gap: 8px;
+  padding: 10px;
 }
 
 .custom-slider {
@@ -451,7 +446,7 @@ h2 {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 205px;
+  min-height: 180px;
 }
 
 .axis-arrow,
@@ -495,7 +490,7 @@ h2 {
   display: grid;
   grid-template-columns: 1fr 64px 1fr;
   gap: 8px;
-  height: 230px;
+  height: 205px;
   align-items: center;
   padding-top: 38px;
 }
@@ -522,7 +517,7 @@ h2 {
 
 .tile-board {
   display: flex;
-  min-height: 205px;
+  min-height: 190px;
   align-content: center;
   align-items: center;
   flex-wrap: wrap;
@@ -564,7 +559,7 @@ h2 {
 
 .fraction-bars {
   display: flex;
-  min-height: 200px;
+  min-height: 185px;
   align-items: center;
   gap: 6px;
   padding: 48px 22px 16px;
@@ -596,7 +591,7 @@ h2 {
 
 .bar-chart {
   display: flex;
-  min-height: 210px;
+  min-height: 190px;
   align-items: end;
   gap: 10px;
   justify-content: center;
@@ -618,7 +613,7 @@ h2 {
 
 .ball-bag {
   display: flex;
-  min-height: 205px;
+  min-height: 190px;
   align-content: center;
   align-items: center;
   flex-wrap: wrap;
@@ -1049,7 +1044,7 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
-@media (max-width: 920px) {
+@media (max-width: 900px) {
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1058,15 +1053,42 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .model-grid {
+  .model-page {
     grid-template-columns: 1fr;
-    grid-template-areas:
-      "visual"
-      "side"
-      "interactive"
-      "practice"
-      "result"
-      "ask";
+  }
+
+  .detail-layout,
+  .left-column,
+  .right-column {
+    display: contents;
+  }
+
+  .visual-card {
+    order: 1;
+  }
+
+  .controls-card {
+    order: 2;
+  }
+
+  .stats-card {
+    order: 3;
+  }
+
+  .interactive-card {
+    order: 4;
+  }
+
+  .practice-card {
+    order: 5;
+  }
+
+  .result-card {
+    order: 6;
+  }
+
+  .ask-card {
+    order: 7;
   }
 
 }
@@ -1100,12 +1122,12 @@ a:focus-visible {
   }
 
   .custom-stage {
-    min-height: 210px;
+    min-height: 190px;
     padding: 10px;
   }
 
   .custom-svg {
-    min-height: 200px;
+    min-height: 180px;
   }
 
   .observation-tip {
@@ -1125,6 +1147,22 @@ a:focus-visible {
 }
 
 @media (max-width: 520px) {
+  .custom-interactive-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(126px, 0.72fr);
+    gap: 8px;
+  }
+
+  .custom-slider-label {
+    display: grid;
+    gap: 2px;
+  }
+
+  .custom-controls {
+    padding: 8px;
+  }
+}
+
+@media (max-width: 350px) {
   .custom-interactive-layout {
     grid-template-columns: 1fr;
   }

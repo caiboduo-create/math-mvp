@@ -3,21 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>AI数学学习产品V4</title>
+    <title>AI数学陪练小程序</title>
     <link rel="stylesheet" href="css/styles.css" />
   </head>
-  <body class="home-page">
-    <header class="site-header home-header">
-      <div class="shell home-header-inner">
-        <h1>AI数学学习产品</h1>
+  <body class="trainer-page">
+    <header class="trainer-hero">
+      <div class="shell trainer-hero-inner">
+        <div>
+          <p class="trainer-eyebrow">小学到初中 · 分层练习 · 错题分析</p>
+          <h1>AI数学陪练</h1>
+        </div>
+        <div id="trainerStatus" class="trainer-status" aria-label="学习状态"></div>
       </div>
     </header>
 
-    <main class="shell page-main">
-      <section class="catalog-grid" id="modelCatalog" aria-label="数学课程列表"></section>
+    <main class="shell trainer-main">
+      <nav class="trainer-nav" aria-label="功能入口">
+        <button class="trainer-nav-button active" type="button" data-section="primary">小学数学</button>
+        <button class="trainer-nav-button" type="button" data-section="junior">初中数学</button>
+        <button class="trainer-nav-button" type="button" data-section="photo">AI拍照讲题</button>
+        <button class="trainer-nav-button" type="button" data-section="mistakes">错题本</button>
+        <button class="trainer-nav-button" type="button" data-section="report">学习报告</button>
+      </nav>
+
+      <section id="trainerApp" class="trainer-app" aria-live="polite"></section>
     </main>
 
     <script src="models.js"></script>
-    <script src="js/home.js"></script>
+    <script src="js/trainer-app.js"></script>
   </body>
 </html>

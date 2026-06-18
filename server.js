@@ -421,9 +421,12 @@ async function handleGenerateQuestion(req, res) {
       "JSON 必须包含 question、answer、analysis、knowledge_point、difficulty、type。",
       "可额外包含 answerValue、aliases、steps、variantStyle、errorTags，aliases、steps、errorTags 必须是字符串数组。",
       "输入会提供年级、知识点、难度1-5、题型和本地种子题，请按这些信息生成题目。",
+      "题目要明显提升学习效果：优先真实生活场景、不同表达方式、轻量思维判断，不要只是机械换数字。",
       "变式不能只换数字，必须从同语义变式、反向提问、生活化应用题、易错辨析、多步骤推理中选择一种。",
+      "允许加入一个温和的易错点干扰，例如单位、符号、是否除以2、总数与目标数，但不能故意出偏题或过难题。",
       "题目要符合给定 modelId、年级和领域，答案必须稳定、可批改，不要生成超纲内容。",
-      "analysis 要给出清晰解析，difficulty 必须是 1 到 5 的整数，type 必须是 基础题、应用题、变式题、多步骤题 之一。",
+      "analysis 要给出清晰解析，difficulty 必须是 1 到 5 的整数，type 必须是 基础题、应用题、思维题、变式题、多步骤题 之一。",
+      "analysis 的语气要像耐心陪练：先解释为什么这样想，再拆步骤，最后给一句记忆总结。",
       "如果无法生成高质量变式，就返回与 localQuestion 同知识点但参数、场景或问法变化后的 JSON。"
     ].join("\n");
     const payload = {

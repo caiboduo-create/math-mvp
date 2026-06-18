@@ -24,7 +24,8 @@
     ai_generate: "按画像、难度和题型调用大模型。"
   };
 
-  const QUESTION_TYPE_POOL = ["基础题", "应用题", "变式题", "多步骤题"];
+  const QUESTION_TYPE_POOL = ["基础题", "应用题", "思维题", "变式题", "多步骤题"];
+  const DEEP_THINKING_TYPES = ["应用题", "思维题", "多步骤题"];
 
   const TOPIC_GROUPS = {
     primary: [
@@ -127,6 +128,7 @@
   let currentQuestion = null;
   let currentResult = null;
   let isLoadingQuestion = false;
+  let currentQuestionStartedAt = 0;
 
   function topic(id, title, stageLabel, domain, tags, generator, detailHref = "") {
     return { id, title, stageLabel, domain, tags, generator, detailHref };
@@ -224,6 +226,12 @@
       accuracy_history: [],
       current_difficulty: 1,
       streak: { correct: 0, wrong: 0 },
+      last_difficulty_change: "none",
+      needs_foundation: false,
+      needs_hint: false,
+      slow_mode: false,
+      challenge_bias: false,
+      answer_time_history: [],
       recent: {
         knowledge_points: [],
         types: [],
@@ -246,12 +254,19 @@
       ...(profile.recent || {})
     };
     normalized.current_difficulty = clampDifficulty(Number(profile.current_difficulty || 1));
+    normalized.last_difficulty_change = profile.last_difficulty_change || "none";
+    normalized.needs_foundation = Boolean(profile.needs_foundation);
+    normalized.needs_hint = Boolean(profile.needs_hint);
+    normalized.slow_mode = Boolean(profile.slow_mode);
+    normalized.challenge_bias = Boolean(profile.challenge_bias);
+    normalized.answer_time_history = Array.isArray(profile.answer_time_history) ? profile.answer_time_history : [];
     return normalized;
   }
 
   function saveProfile(profile) {
     profile.current_difficulty = clampDifficulty(Number(profile.current_difficulty || 1));
     profile.accuracy_history = (profile.accuracy_history || []).slice(-120);
+    profile.answer_time_history = (profile.answer_time_history || []).slice(-60);
     profile.error_types = Array.from(new Set(profile.error_types || [])).slice(-40);
     profile.recent = {
       knowledge_points: (profile.recent?.knowledge_points || []).slice(-8),
@@ -290,13 +305,57 @@
     return correct / recent.length;
   }
 
+  function hasRecentDeepThinking(profile, size = 4) {
+    return (profile.recent?.types || [])
+      .slice(-size)
+      .some((type) => DEEP_THINKING_TYPES.includes(type));
+  }
+
+  function averageAnswerSeconds(profile, size = 5) {
+    const recent = (profile.answer_time_history || []).slice(-size);
+    if (!recent.length) {
+      return null;
+    }
+    return recent.reduce((sum, value) => sum + Number(value || 0), 0) / recent.length;
+  }
+
+  function hasConcentratedErrors(profile) {
+    const wrong = (profile.accuracy_history || []).filter((item) => !item.correct).slice(-3);
+    if (wrong.length < 2) {
+      return false;
+    }
+    const tags = wrong.flatMap((item) => item.error_types || []);
+    return tags.some((tag) => tags.filter((item) => item === tag).length >= 2);
+  }
+
   function selectQuestionType(mode) {
     const profile = getProfile();
+    const accuracy = recentAccuracy(profile, 8);
+    const forceDeep = (profile.recent?.types || []).length >= 4 && !hasRecentDeepThinking(profile, 4);
+
+    if (profile.needs_foundation) {
+      return forceDeep ? "应用题" : "基础题";
+    }
+
+    if (profile.slow_mode) {
+      return forceDeep ? "应用题" : "基础题";
+    }
+
+    if (forceDeep) {
+      return choice(["应用题", "思维题"]);
+    }
+
+    if (hasConcentratedErrors(profile)) {
+      return "变式题";
+    }
+
     const preferred = {
       basic: "基础题",
-      advanced: choice(["应用题", "多步骤题"]),
+      advanced: choice(["应用题", "思维题", "多步骤题"]),
       mistake: "变式题",
-      ai_generate: choice(["应用题", "变式题", "多步骤题"])
+      ai_generate: accuracy !== null && accuracy > 0.85
+        ? choice(["应用题", "思维题", "多步骤题"])
+        : choice(["应用题", "变式题", "思维题", "基础题"])
     }[mode] || choice(QUESTION_TYPE_POOL);
     if (!recentAllEqual(profile.recent.types, 2, preferred)) {
       return preferred;
@@ -308,17 +367,19 @@
     const profile = getProfile();
     const base = clampDifficulty(profile.current_difficulty);
     let target = base;
-    if (mode === "basic") {
+    if (profile.needs_foundation || profile.slow_mode) {
+      target = Math.max(1, base - 1);
+    } else if (mode === "basic") {
       target = Math.max(1, base - 1);
     } else if (mode === "advanced") {
-      target = Math.min(5, base + 1);
+      target = profile.last_difficulty_change === "up" ? base : Math.min(5, base + 1);
     } else if (mode === "mistake") {
       target = Math.max(1, base);
     } else if (mode === "ai_generate") {
-      target = base;
+      target = profile.challenge_bias && profile.last_difficulty_change !== "up" ? Math.min(5, base + 1) : base;
     }
 
-    if (recentAllEqual(profile.recent.difficulties, 3, target)) {
+    if (!profile.needs_foundation && !profile.slow_mode && profile.last_difficulty_change !== "up" && recentAllEqual(profile.recent.difficulties, 3, target)) {
       target = target >= 5 ? 4 : target + 1;
     }
     return clampDifficulty(target);
@@ -337,10 +398,21 @@
       return preferredTopic;
     }
     const profile = getProfile();
+    const preferredMastery = masteryFor(profile, preferredTopic.title);
+    const sameGradeTopics = allTopicsForSection(currentSection);
+
+    if (preferredMastery > 0.85) {
+      const unmastered = sameGradeTopics
+        .filter((item) => item.id !== preferredTopic.id && masteryFor(profile, item.title) <= 0.85);
+      if (unmastered.length && Math.random() < 0.65) {
+        return choice(unmastered);
+      }
+    }
+
     if (!recentAllEqual(profile.recent.knowledge_points, 2, preferredTopic.id)) {
       return preferredTopic;
     }
-    const candidates = allTopicsForSection(currentSection)
+    const candidates = sameGradeTopics
       .filter((item) => item.id !== preferredTopic.id);
     return candidates.length ? choice(candidates) : preferredTopic;
   }
@@ -480,10 +552,11 @@
 
   function topicCard(item, grade) {
     const stats = topicStats(item.id);
+    const mastered = stats.mastery > 85;
     const tags = item.tags.slice(0, 3).map((tag) => `<span>${escapeHTML(tag)}</span>`).join("");
     return `
       <button type="button" class="knowledge-card" data-topic="${escapeHTML(item.id)}">
-        <span class="knowledge-title">${escapeHTML(item.title)}</span>
+        <span class="knowledge-title">${escapeHTML(item.title)}${mastered ? " · 已掌握" : ""}</span>
         <span class="knowledge-meta">${escapeHTML(grade)} · ${escapeHTML(item.domain)}</span>
         <span class="knowledge-tags">${tags}</span>
         <span class="mastery-line"><i style="width:${stats.mastery}%"></i></span>
@@ -612,8 +685,11 @@
         showInlineMessage("请先填写你的答案。");
         return;
       }
+      const timeSpentSeconds = currentQuestionStartedAt ? Math.round((Date.now() - currentQuestionStartedAt) / 1000) : 0;
       currentResult = gradeCurrentQuestion(userAnswer);
-      recordAttempt(topicItem, currentQuestion, userAnswer, currentResult);
+      const updatedProfile = recordAttempt(topicItem, currentQuestion, userAnswer, currentResult, timeSpentSeconds);
+      currentResult.feedback = buildLearningFeedback(currentQuestion, currentResult, updatedProfile);
+      currentResult.memorySummary = buildMemorySummary(currentQuestion, currentResult);
       const result = app.querySelector("#gradeResult");
       if (result) {
         result.innerHTML = renderGradeResult(currentResult);
@@ -645,6 +721,7 @@
     }
 
     currentQuestion = question;
+    currentQuestionStartedAt = Date.now();
     rememberGeneratedQuestion(question);
     currentResult = null;
     isLoadingQuestion = false;
@@ -730,19 +807,99 @@
     };
   }
 
+  function scenarioForTopic(topicItem) {
+    const title = topicItem.title;
+    if (/方程|比例|百分数|函数/.test(title)) {
+      return choice(["社团采购", "校园义卖", "运动会报名", "学习计划"]);
+    }
+    if (/几何|圆|三角形|周长|面积|体积|勾股/.test(title)) {
+      return choice(["教室布置", "操场测量", "手工制作", "校园海报"]);
+    }
+    if (/概率|数据|统计/.test(title)) {
+      return choice(["班级调查", "抽奖活动", "阅读记录", "体育统计"]);
+    }
+    return choice(["生活记录", "课堂讨论", "小组合作", "课后练习"]);
+  }
+
+  function interferenceHint(topicItem, subtype) {
+    const text = `${topicItem.title}${subtype || ""}`;
+    if (/三角形/.test(text)) {
+      return "注意：不要忘记面积公式里有“除以2”。";
+    }
+    if (/方程/.test(text)) {
+      return "注意：等式两边要做相同操作，不要只移一边。";
+    }
+    if (/有理数|正负/.test(text)) {
+      return "注意：先判断符号，再算绝对值。";
+    }
+    if (/圆|扇形/.test(text)) {
+      return "注意：周长和面积公式不要混用。";
+    }
+    if (/概率/.test(text)) {
+      return "注意：概率的分母是所有可能结果，不是只看目标数量。";
+    }
+    if (/同类项|整式/.test(text)) {
+      return "注意：只有字母和指数都相同的项才能合并。";
+    }
+    return "注意：先判断题目问什么，再选择方法。";
+  }
+
+  function improveQuestionText(topicItem, partial, questionType, variantStyle) {
+    const raw = String(partial.question || "").trim();
+    const scenario = scenarioForTopic(topicItem);
+    const hint = interferenceHint(topicItem, partial.type);
+    const forms = {
+      "基础题": [
+        raw,
+        `先看清条件：${raw}`,
+        `${raw} ${hint}`
+      ],
+      "应用题": [
+        `${scenario}中遇到一个问题：${raw} 请帮同学写出答案。`,
+        `把数学用到生活里：${raw} ${hint}`,
+        `小组在做“${scenario}”任务时需要解决：${raw}`
+      ],
+      "思维题": [
+        `不急着算，先判断该用哪个知识点：${raw} 请说明关键依据并作答。`,
+        `如果有同学直接套公式，你会提醒他什么？${raw}`,
+        `请先找出容易出错的地方，再完成：${raw} ${hint}`
+      ],
+      "变式题": [
+        `换一种问法：${raw}`,
+        `${raw} 请同时检查单位、符号或条件是否用对。`,
+        `同知识点变式：${raw} ${hint}`
+      ],
+      "多步骤题": [
+        `请分两步完成：第一步判断方法，第二步计算。${raw}`,
+        `${scenario}任务需要完整过程：${raw} ${hint}`,
+        `先列关系式，再计算结果：${raw}`
+      ]
+    };
+    const pool = forms[questionType] || forms["基础题"];
+    const selected = choice(pool);
+    return variantStyle === "易错辨析" && !selected.includes("注意") ? `${selected} ${hint}` : selected;
+  }
+
   function baseQuestion(topicItem, mode, partial) {
     const difficulty = partial.difficulty ? clampDifficulty(partial.difficulty) : selectDifficultyForMode(mode);
     const questionType = partial.questionType || selectQuestionType(mode);
-    const variantStyle = mode === "ai"
-      ? choice(["同语义变式", "反向提问", "生活化应用题"])
-      : mode === "ai_generate"
+    const variantStyle = mode === "ai_generate"
         ? choice(["同语义变式", "反向提问", "生活化应用题", "多步骤变式"])
       : mode === "advanced"
         ? choice(["反向提问", "条件变化"])
       : mode === "mistake"
         ? "易错辨析"
         : "核心题型";
-    const analysis = partial.analysis || partial.explanation || "";
+    const profile = getProfile();
+    const slowMode = Boolean(profile.slow_mode);
+    const analysis = `${partial.analysis || partial.explanation || ""}${slowMode ? " 慢一点没关系，先把条件和公式对应起来，再计算会更稳。" : ""}`;
+    const question = improveQuestionText(topicItem, partial, questionType, variantStyle);
+    const steps = slowMode && Array.isArray(partial.steps) && partial.steps.length
+      ? [
+          { title: "读题提示", content: "先圈出已知量和问题，再决定公式。", explain: "速度慢时先稳住理解，比抢速度更重要。" },
+          ...partial.steps
+        ]
+      : partial.steps || [];
 
     return {
       id: `q_${Date.now()}_${randomInt(1000, 9999)}`,
@@ -754,11 +911,11 @@
       type: questionType,
       subtype: partial.type || "计算题",
       difficulty,
-      question: partial.question,
+      question,
       answer: partial.answer,
       answerValue: partial.answerValue,
       aliases: partial.aliases || [],
-      steps: partial.steps || [],
+      steps,
       analysis,
       explanation: analysis,
       errorTags: partial.errorTags || ["方法选择"],
@@ -1523,6 +1680,62 @@
     return "关键词或概念不完整，建议对照定义重新判断。";
   }
 
+  function buildLearningFeedback(question, result, profile) {
+    const mastery = masteryFor(profile, question.knowledge_point || question.knowledge);
+    if (result.correct) {
+      if (mastery > 0.85) {
+        return "这个知识点已经接近掌握，后面会减少重复出现，把练习机会留给更需要巩固的点。";
+      }
+      if (profile.slow_mode) {
+        return "这次做对了，很好。先稳定理解，再慢慢提速，系统会暂时多给基础和解释。";
+      }
+      if ((profile.streak?.correct || 0) === 0 && profile.last_difficulty_change === "up") {
+        return "连续答对很稳，下一题会稍微有一点挑战，但不会突然变难。";
+      }
+      if (question.type === "应用题" || question.type === "思维题") {
+        return "很好，你不是只算数字，而是抓住了题目关系。";
+      }
+      return "做得不错，继续保持这个节奏。";
+    }
+
+    if (profile.needs_foundation) {
+      return "别急，这说明当前点还需要补一小块基础。下一题会先简化，帮你找回手感。";
+    }
+
+    if (profile.slow_mode) {
+      return "这题先不用追求速度。我们会多给一步解释，帮你把关系看清楚。";
+    }
+
+    if (profile.needs_hint) {
+      return "这题差一点。先看下面的错因和提示，下一题不用急着快，先把关系找准。";
+    }
+
+    return "注意计算和条件匹配，错题是用来定位问题的，不是用来打击你的。";
+  }
+
+  function buildMemorySummary(question, result) {
+    if (result.correct) {
+      return "一句话记住：先判断关系，再代入计算，最后检查单位或符号。";
+    }
+    const text = `${question.knowledge_point || question.knowledge}${question.subtype || ""}`;
+    if (/方程/.test(text)) {
+      return "一句话记住：解方程的每一步，都要让等式两边同步变化。";
+    }
+    if (/三角形/.test(text)) {
+      return "一句话记住：三角形面积是底乘高的一半，最后别漏除以2。";
+    }
+    if (/有理数|正负/.test(text)) {
+      return "一句话记住：有正负号时，先定符号，再算大小。";
+    }
+    if (/概率/.test(text)) {
+      return "一句话记住：概率先数总可能，再数目标可能。";
+    }
+    if (/同类项|整式/.test(text)) {
+      return "一句话记住：同类项只合并系数，字母部分不能乱变。";
+    }
+    return "一句话记住：先读懂题目问什么，再选择公式或规则。";
+  }
+
   function renderGradeResult(result) {
     const question = currentQuestion;
     const steps = (question.steps || []).map((step) => `
@@ -1539,25 +1752,40 @@
         <span>${escapeHTML(variant.question)}</span>
       </li>
     `).join("");
+    const firstVariant = result.reinforcementQuestions?.[0];
 
     return `
       <div class="grade-result ${result.correct ? "correct" : "wrong"}">
         <h4>${result.correct ? "判断结果：正确" : "判断结果：错误"}</h4>
+        <p class="feedback-banner">${escapeHTML(result.feedback || "")}</p>
         <div class="result-grid">
           <div>
             <span>正确答案</span>
             <strong>${escapeHTML(question.answer)}</strong>
           </div>
           <div>
-            <span>错因分析</span>
+            <span>${result.correct ? "学习反馈" : "错因分析"}</span>
             <strong>${escapeHTML(result.cause)}</strong>
           </div>
         </div>
+        ${!result.correct ? `
+          <div class="step-card">
+            <h5>为什么错</h5>
+            <p>${escapeHTML(result.cause)} 这类题最容易在“条件判断”和“计算步骤”之间断开，所以要先确认题目问的是什么。</p>
+          </div>
+        ` : ""}
         <div class="step-card">
-          <h5>解题步骤</h5>
+          <h5>${result.correct ? "解题步骤" : "正确思路一步步拆解"}</h5>
           <ol>${steps}</ol>
         </div>
         <p class="mistake-tip"><strong>易错点：</strong>${escapeHTML(question.commonMistake)}</p>
+        ${!result.correct && firstVariant ? `
+          <div class="variant-card">
+            <h5>类似题提醒</h5>
+            <p>${escapeHTML(firstVariant.question)}</p>
+          </div>
+        ` : ""}
+        <p class="mistake-tip"><strong>一句话总结：</strong>${escapeHTML(result.memorySummary || buildMemorySummary(question, result))}</p>
         ${variants ? `
           <div class="variant-card">
             <h5>错题强化：3道同知识点变式题</h5>
@@ -1568,19 +1796,26 @@
     `;
   }
 
-  function updateStudentProfile(question, result) {
+  function updateStudentProfile(question, result, timeSpentSeconds = 0) {
     const profile = getProfile();
     const knowledgePoint = question.knowledge_point || question.knowledge;
     const previousMastery = masteryFor(profile, knowledgePoint);
     const delta = result.correct ? 0.05 : -0.05;
     profile.knowledge_mastery[knowledgePoint] = Number(clamp(previousMastery + delta, 0, 1).toFixed(2));
+    profile.answer_time_history = [
+      ...(profile.answer_time_history || []),
+      Math.max(0, Number(timeSpentSeconds || 0))
+    ].slice(-60);
 
     if (result.correct) {
       profile.streak.correct = (profile.streak.correct || 0) + 1;
       profile.streak.wrong = 0;
+      profile.needs_hint = false;
+      profile.needs_foundation = false;
     } else {
       profile.streak.wrong = (profile.streak.wrong || 0) + 1;
       profile.streak.correct = 0;
+      profile.needs_hint = profile.streak.wrong === 1;
       profile.error_types = [
         ...(profile.error_types || []),
         ...(question.errorTags || []),
@@ -1601,29 +1836,45 @@
     ].slice(-120);
 
     const accuracy = recentAccuracy(profile, 10);
-    if (accuracy !== null && accuracy > 0.85) {
-      profile.current_difficulty += 1;
-    } else if (accuracy !== null && accuracy < 0.6) {
-      profile.current_difficulty -= 1;
-    }
+    const averageSeconds = averageAnswerSeconds(profile, 5);
+    profile.slow_mode = averageSeconds !== null && averageSeconds > 65;
+    profile.challenge_bias = accuracy !== null && accuracy > 0.85 && !profile.slow_mode;
+    let difficultyChange = 0;
 
     if ((profile.streak.correct || 0) >= 3) {
-      profile.current_difficulty += 1;
+      difficultyChange = profile.last_difficulty_change === "up" ? 0 : 1;
       profile.streak.correct = 0;
     }
 
     if ((profile.streak.wrong || 0) >= 2) {
-      profile.current_difficulty -= 1;
+      difficultyChange = -1;
       profile.needs_reinforcement = true;
+      profile.needs_foundation = true;
+      profile.needs_hint = false;
       profile.streak.wrong = 0;
+    }
+
+    if (difficultyChange === 0 && accuracy !== null && accuracy < 0.6) {
+      difficultyChange = -1;
+      profile.needs_foundation = true;
+    }
+
+    if (difficultyChange > 0) {
+      profile.current_difficulty += 1;
+      profile.last_difficulty_change = "up";
+    } else if (difficultyChange < 0) {
+      profile.current_difficulty -= 1;
+      profile.last_difficulty_change = "down";
+    } else {
+      profile.last_difficulty_change = result.correct ? "steady" : profile.last_difficulty_change;
     }
 
     saveProfile(profile);
     return profile;
   }
 
-  function recordAttempt(topicItem, question, userAnswer, result) {
-    const profile = updateStudentProfile(question, result);
+  function recordAttempt(topicItem, question, userAnswer, result, timeSpentSeconds = 0) {
+    const profile = updateStudentProfile(question, result, timeSpentSeconds);
     const progress = getProgress();
     const today = todayKey();
     if (progress.lastStudyDate !== today) {
@@ -1661,6 +1912,7 @@
       answer: question.answer,
       analysis: question.analysis,
       explanation: question.explanation,
+      timeSpentSeconds,
       steps: question.steps,
       errorTags: question.errorTags,
       correct: result.correct,
@@ -1677,6 +1929,8 @@
     if (!result.correct) {
       saveMistakes([record, ...getMistakes()].slice(0, 100));
     }
+
+    return profile;
   }
 
   function renderPhotoHelper() {

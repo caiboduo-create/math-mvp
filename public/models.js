@@ -1423,23 +1423,25 @@
         );
       }
       case "trigonometry": {
-        const triples = [[3, 4, 5], [5, 12, 13], [8, 15, 17], [7, 24, 25], [9, 12, 15], [12, 16, 20]];
-        const [opposite, adjacent, hypotenuse] = choice(triples);
-        const mode = choice(["sin", "cos", "tan"]);
-        const value = mode === "sin" ? round(opposite / hypotenuse) : mode === "cos" ? round(adjacent / hypotenuse) : round(opposite / adjacent);
-        const knownText = mode === "sin"
-          ? `sinA = 对边 / 斜边。已知对边为 ${opposite}，斜边为 ${hypotenuse}`
-          : mode === "cos"
-            ? `cosA = 邻边 / 斜边。已知邻边为 ${adjacent}，斜边为 ${hypotenuse}`
-            : `tanA = 对边 / 邻边。已知对边为 ${opposite}，邻边为 ${adjacent}`;
+        const target = choice(["hypotenuse", "sin45"]);
+        if (target === "hypotenuse") {
+          return questionResult(
+            "一个等腰直角三角形，两条直角边都为1，求斜边长度是多少？",
+            "√2",
+            {
+              aliases: ["根号2", "sqrt2", "sqrt(2)"],
+              steps: ["画出等腰直角三角形，两条直角边都是 1", "用勾股定理：斜边² = 1² + 1² = 2", "所以斜边长度 = √2"],
+              explanation: "这题只求斜边长度，用勾股定理即可。"
+            }
+          );
+        }
         return questionResult(
-          `直角三角形中，${knownText}，求 ${mode}A。`,
-          `${value}`,
+          "一个等腰直角三角形，两条直角边都为1，斜边为√2，求 sin45° 的值是多少？",
+          "√2/2",
           {
-            answerValue: Number(value),
-            tolerance: 0.01,
-            steps: [mode === "sin" ? `sinA = ${opposite} ÷ ${hypotenuse}` : mode === "cos" ? `cosA = ${adjacent} ÷ ${hypotenuse}` : `tanA = ${opposite} ÷ ${adjacent}`, `${mode}A = ${value}`],
-            explanation: "锐角三角函数表示直角三角形中两条边的比值。"
+            aliases: ["根号2/2", "√2÷2", "1/√2", "1÷√2"],
+            steps: ["画出等腰直角三角形，两个锐角都是 45°", "对 45° 来说，对边 = 1，斜边 = √2", "sin45° = 对边 / 斜边 = 1 / √2 = √2 / 2"],
+            explanation: "这题只求 sin45° 的边长比例，不再求斜边长度。"
           }
         );
       }

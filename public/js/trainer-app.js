@@ -1006,6 +1006,9 @@
 
   function interferenceHint(topicItem, subtype) {
     const text = `${topicItem.title}${subtype || ""}`;
+    if (/三角函数|sin|cos|tan|等腰直角|45°|斜边/.test(text)) {
+      return "注意：先分清题目是求边长，还是求三角函数比值。";
+    }
     if (/三角形/.test(text)) {
       return "注意：不要忘记面积公式里有“除以2”。";
     }
@@ -1729,20 +1732,37 @@
   }
 
   function genTrigonometry(topicItem, mode) {
-    const cases = [
-      ["30°", "1/2"],
-      ["45°", "√2/2"],
-      ["60°", "√3/2"]
-    ];
-    const selected = choice(cases);
+    const target = choice(["hypotenuse", "sin45"]);
+    if (target === "hypotenuse") {
+      return baseQuestion(topicItem, mode, {
+        type: "等腰直角三角形",
+        question: "一个等腰直角三角形，两条直角边都为1，求斜边长度是多少？",
+        answer: "√2",
+        aliases: ["根号2", "sqrt2", "sqrt(2)"],
+        steps: stepList([
+          "画出等腰直角三角形，两条直角边都是 1",
+          "用勾股定理：斜边² = 1² + 1² = 2",
+          "所以斜边长度 = √2"
+        ]),
+        explanation: "这题只求斜边长度，用勾股定理即可。",
+        errorTags: ["勾股定理", "题目目标混淆"],
+        commonMistake: "把“求斜边长度”和“求三角函数比例”混在一起。"
+      });
+    }
+
     return baseQuestion(topicItem, mode, {
-      type: "特殊角三角函数",
-      question: `sin ${selected[0]} 的值是多少？`,
-      answer: selected[1],
-      aliases: [selected[1], selected[1].replace("/", "÷")],
-      steps: stepList(["回忆特殊角三角函数表", `sin ${selected[0]} = ${selected[1]}`]),
-      explanation: "特殊角的三角函数值要熟练记忆。",
-      errorTags: ["特殊角", "函数值混淆"]
+      type: "sin45°",
+      question: "一个等腰直角三角形，两条直角边都为1，斜边为√2，求 sin45° 的值是多少？",
+      answer: "√2/2",
+      aliases: ["根号2/2", "√2÷2", "1/√2", "1÷√2"],
+      steps: stepList([
+        "画出等腰直角三角形，两个锐角都是 45°",
+        "对 45° 来说，对边 = 1，斜边 = √2",
+        "sin45° = 对边 / 斜边 = 1 / √2 = √2 / 2"
+      ]),
+      explanation: "这题只求 sin45° 的边长比例，不再求斜边长度。",
+      errorTags: ["特殊角", "三角函数比例"],
+      commonMistake: "把“斜边长度 √2”和“sin45° 的比值 √2/2”混淆。"
     });
   }
 
@@ -1945,6 +1965,9 @@
     if (/方程/.test(text)) {
       return "一句话记住：解方程的每一步，都要让等式两边同步变化。";
     }
+    if (/三角函数|sin|cos|tan|等腰直角|45°|斜边/.test(text)) {
+      return "一句话记住：先分清目标，求斜边用勾股，求 sin 值用对边除以斜边。";
+    }
     if (/三角形/.test(text)) {
       return "一句话记住：三角形面积是底乘高的一半，最后别漏除以2。";
     }
@@ -2136,6 +2159,11 @@
   }
 
   function renderGeometryStage(lesson, stepIndex) {
+    const questionText = `${lesson.question || ""}${currentQuestion?.answer || ""}`;
+    if (/等腰直角三角形|sin45|sin 45|45°|√2/.test(questionText)) {
+      return renderIsoscelesRightTriangleStage(lesson, stepIndex);
+    }
+
     const showLabels = stepIndex >= 1;
     const showFormula = stepIndex >= 2;
     const showResult = stepIndex >= lesson.animation_steps.length - 1;
@@ -2160,6 +2188,43 @@
           <g class="result-badge is-active">
             <rect x="94" y="76" width="172" height="42" rx="21"></rect>
             <text x="180" y="103">${escapeHTML(currentQuestion?.answer || lesson.answer)}</text>
+          </g>
+        ` : ""}
+      </svg>
+    `;
+  }
+
+  function renderIsoscelesRightTriangleStage(lesson, stepIndex) {
+    const showLabels = stepIndex >= 1;
+    const showFormula = stepIndex >= 2;
+    const showResult = stepIndex >= lesson.animation_steps.length - 1;
+    const isSinQuestion = /sin45|sin 45|sin45°|sin 45°/.test(lesson.question);
+    const formulaText = isSinQuestion
+      ? "sin45° = 对边 / 斜边 = 1 / √2 = √2 / 2"
+      : "斜边² = 1² + 1² = 2";
+    return `
+      <svg viewBox="0 0 360 240" class="lecture-svg geometry-svg right-triangle-svg" role="img" aria-label="等腰直角三角形动画讲解">
+        <rect x="14" y="14" width="332" height="212" rx="18" fill="#f8fbff"></rect>
+        <path d="M82 178 L250 178 L82 50 Z" class="shape-line ${stepIndex === 0 ? "is-active" : ""}"></path>
+        <path d="M82 178 L112 178 L112 148 L82 148 Z" class="angle-mark ${showLabels ? "is-visible" : ""}"></path>
+        <path d="M82 50 L120 50" class="helper-line ${showLabels ? "is-visible" : ""}"></path>
+        ${showLabels ? `
+          <text x="152" y="198" class="point-label">直角边 = 1</text>
+          <text x="38" y="118" class="point-label" transform="rotate(-90 38 118)">直角边 = 1</text>
+          <text x="172" y="105" class="point-label ${isSinQuestion ? "is-active" : ""}">斜边 = √2</text>
+          <text x="214" y="166" class="point-label">45°</text>
+          <text x="96" y="168" class="point-label">90°</text>
+        ` : ""}
+        ${showFormula ? `
+          <g class="formula-card ${stepIndex === 2 ? "is-active" : ""}">
+            <rect x="36" y="20" width="288" height="40" rx="18"></rect>
+            <text x="180" y="45">${escapeHTML(formulaText)}</text>
+          </g>
+        ` : ""}
+        ${showResult ? `
+          <g class="result-badge is-active">
+            <rect x="76" y="82" width="208" height="42" rx="21"></rect>
+            <text x="180" y="109">${escapeHTML(currentQuestion?.answer || lesson.answer)}</text>
           </g>
         ` : ""}
       </svg>

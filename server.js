@@ -249,6 +249,16 @@ app.get("/model.html", (req, res) => {
   res.sendFile(path.join(publicDir, "model.html"));
 });
 
+app.get("/_debug", (req, res) => {
+  res.json({
+    cwd: process.cwd(),
+    filename: __filename,
+    dirname: __dirname,
+    version: "V4-railway-debug",
+    time: new Date().toISOString()
+  });
+});
+
 app.post("/api/ask", handleAsk);
 
 app.all("/api/ask", (req, res) => {

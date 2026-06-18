@@ -10,12 +10,12 @@
     <header class="site-header compact">
       <div class="shell header-inner">
         <a class="back-link" href="index.html" aria-label="返回首页">← 返回首页</a>
-        <div>
+        <div class="title-block">
           <p class="eyebrow">AI数学学习产品V4</p>
           <h1 id="modelTitle">加载中</h1>
           <p class="model-subtitle" id="modelMetaLine"></p>
+          <div class="learning-status" id="mistakeCount">错题 0 · 已答 0 · 正确率 0%</div>
         </div>
-        <div class="mistake-pill" id="mistakeCount">本模型错题数量：0</div>
       </div>
     </header>
 
@@ -41,11 +41,17 @@
 
         <aside class="right-column">
         <section class="card controls-card">
-          <div class="card-heading">
+          <button class="collapse-toggle" id="formulaToggle" type="button" aria-expanded="true" aria-controls="formulaContent">
+            <span>核心公式与例题</span>
+            <span class="collapse-label">收起</span>
+          </button>
+          <div class="card-heading desktop-formula-heading">
             <h2>核心公式与例题</h2>
           </div>
-          <div id="sliderPanel" class="slider-panel"></div>
-          <div id="metricPanel" class="metric-panel"></div>
+          <div id="formulaContent" class="formula-content">
+            <div id="sliderPanel" class="slider-panel"></div>
+            <div id="metricPanel" class="metric-panel"></div>
+          </div>
         </section>
 
         </aside>

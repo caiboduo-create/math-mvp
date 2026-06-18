@@ -18,6 +18,8 @@
   const interactiveFallback = document.getElementById("interactive-fallback");
   const sliders = document.getElementById("sliderPanel");
   const metrics = document.getElementById("metricPanel");
+  const formulaToggle = document.getElementById("formulaToggle");
+  const formulaContent = document.getElementById("formulaContent");
   const askForm = document.getElementById("askForm");
   const askInput = document.getElementById("askInput");
   const askResult = document.getElementById("askResult");
@@ -33,6 +35,8 @@
   const statWrong = document.getElementById("statWrong");
   const statRate = document.getElementById("statRate");
   const resetStatsButton = document.getElementById("resetStatsButton");
+  const mobileFormulaQuery = window.matchMedia("(max-width: 768px)");
+  let formulaUserToggled = false;
 
   if (!model) {
     document.title = "模型不存在 - AI数学学习产品V4";
@@ -63,6 +67,26 @@
   title.textContent = model.title;
   metaLine.textContent = `${model.grade} · ${model.domain}`;
   description.textContent = model.description;
+
+  function setFormulaExpanded(expanded) {
+    formulaContent.hidden = !expanded;
+    formulaToggle.setAttribute("aria-expanded", String(expanded));
+    const label = formulaToggle.querySelector(".collapse-label");
+    if (label) {
+      label.textContent = expanded ? "收起" : "展开";
+    }
+  }
+
+  function syncFormulaCollapse() {
+    if (mobileFormulaQuery.matches) {
+      if (!formulaUserToggled) {
+        setFormulaExpanded(false);
+      }
+      return;
+    }
+
+    setFormulaExpanded(true);
+  }
 
   function createInfoItem(label, value) {
     const item = document.createElement("div");
@@ -281,7 +305,11 @@
     interactiveFallback.replaceChildren();
     interactiveContainer.replaceChildren();
     interactiveContainer.className = "interactive-container is-geogebra";
-    const geogebraHeight = Math.min(430, Math.max(360, Number(geoConfig.height) || 400));
+    const isMobileView = window.matchMedia("(max-width: 768px)").matches;
+    const configuredHeight = Number(isMobileView ? geoConfig.mobileHeight : geoConfig.height);
+    const geogebraHeight = isMobileView
+      ? Math.min(340, Math.max(300, configuredHeight || 320))
+      : Math.min(430, Math.max(380, configuredHeight || 400));
     interactiveContainer.style.minHeight = `${geogebraHeight}px`;
 
     if (geoConfig.embedType === "iframe" && geoConfig.materialId) {
@@ -464,8 +492,9 @@
   }
 
   function updateMistakeCount() {
-    const count = model ? getStats().wrong : 0;
-    mistakeCount.textContent = `本模型错题数量：${count}`;
+    const stats = model ? getStats() : { correct: 0, wrong: 0, total: 0 };
+    const rate = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+    mistakeCount.textContent = `错题 ${stats.wrong} · 已答 ${stats.total} · 正确率 ${rate}%`;
   }
 
   function recordMistake(question, userAnswer, correct) {
@@ -845,6 +874,16 @@
     gradeResult.textContent = message;
   }
 
+  formulaToggle.addEventListener("click", () => {
+    formulaUserToggled = true;
+    setFormulaExpanded(formulaContent.hidden);
+  });
+
+  mobileFormulaQuery.addEventListener("change", () => {
+    formulaUserToggled = false;
+    syncFormulaCollapse();
+  });
+
   generateProblemButton.addEventListener("click", () => {
     aiProblemBox.textContent = "正在随机出题...";
     aiProblemBox.classList.remove("muted-box", "format-error");
@@ -920,6 +959,7 @@
   buildSliders();
   renderAll();
   renderInteractive();
+  syncFormulaCollapse();
   updateStatsPanel();
   updateMistakeCount();
 })();

@@ -16,6 +16,12 @@
   box-sizing: border-box;
 }
 
+html,
+body {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -53,9 +59,7 @@ textarea {
 }
 
 .site-header.compact {
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  position: relative;
 }
 
 .header-inner {
@@ -150,7 +154,8 @@ h2 {
   background: var(--blue-700);
 }
 
-.mistake-pill {
+.mistake-pill,
+.learning-status {
   display: inline-flex;
   min-height: 42px;
   align-items: center;
@@ -161,6 +166,13 @@ h2 {
   background: var(--blue-100);
   font-weight: 800;
   white-space: nowrap;
+}
+
+.learning-status {
+  min-height: 32px;
+  margin-top: 10px;
+  padding: 0 12px;
+  font-size: 0.9rem;
 }
 
 .catalog-grid {
@@ -296,6 +308,26 @@ h2 {
   display: grid;
   gap: 6px;
   margin-bottom: 14px;
+}
+
+.collapse-toggle {
+  display: none;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 4px;
+  color: var(--blue-900);
+  background: transparent;
+  cursor: pointer;
+  font-weight: 900;
+}
+
+.collapse-label {
+  color: var(--blue-700);
+  font-size: 0.92rem;
 }
 
 .card-heading p {
@@ -1042,6 +1074,246 @@ a:focus-visible {
   outline-offset: 2px;
 }
 
+@media (max-width: 768px) {
+  body {
+    font-size: 16px;
+  }
+
+  .shell {
+    width: min(100% - 20px, 1160px);
+  }
+
+  .site-header.compact {
+    position: relative;
+    z-index: auto;
+  }
+
+  .header-inner {
+    display: grid;
+    min-height: auto;
+    align-items: start;
+    justify-content: stretch;
+    gap: 10px;
+    padding: 12px 0;
+  }
+
+  .compact .header-inner {
+    min-height: auto;
+  }
+
+  .eyebrow {
+    display: none;
+  }
+
+  h1,
+  #modelTitle {
+    font-size: 2rem;
+    line-height: 1.15;
+  }
+
+  h2,
+  .card h2 {
+    font-size: 1.38rem;
+  }
+
+  .model-subtitle {
+    margin-top: 4px;
+    font-size: 0.95rem;
+  }
+
+  .learning-status {
+    display: flex;
+    width: fit-content;
+    max-width: 100%;
+    min-height: 30px;
+    margin-top: 8px;
+    padding: 0 10px;
+    font-size: 0.88rem;
+    white-space: normal;
+  }
+
+  .back-link {
+    width: fit-content;
+    min-height: 36px;
+    padding: 0 10px;
+    font-size: 0.92rem;
+  }
+
+  .page-main {
+    padding: 12px 0 28px;
+  }
+
+  .model-page {
+    gap: 12px;
+  }
+
+  .card {
+    border-radius: 12px;
+    padding: 16px;
+  }
+
+  .card-heading {
+    margin-bottom: 10px;
+  }
+
+  .card-heading p {
+    line-height: 1.55;
+  }
+
+  .visual-card {
+    order: 1;
+  }
+
+  .interactive-card {
+    order: 2;
+  }
+
+  .practice-card {
+    order: 3;
+  }
+
+  .result-card {
+    order: 4;
+  }
+
+  .ask-card {
+    order: 5;
+  }
+
+  .controls-card {
+    order: 6;
+  }
+
+  .stats-card {
+    order: 7;
+  }
+
+  .desktop-formula-heading {
+    display: none;
+  }
+
+  .collapse-toggle {
+    display: flex;
+  }
+
+  .interactive-container.is-geogebra {
+    min-height: 320px;
+  }
+
+  .custom-interactive {
+    padding: 8px;
+  }
+
+  .custom-interactive-layout {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .custom-stage {
+    min-height: 190px;
+    padding: 10px;
+  }
+
+  .custom-controls {
+    padding: 10px;
+  }
+
+  .custom-svg {
+    min-height: 178px;
+  }
+
+  .observation-tip {
+    display: grid;
+  }
+
+  .content-box,
+  .answer-box,
+  .problem-section,
+  .grade-result-card {
+    padding: 12px;
+  }
+
+  .primary-button,
+  .secondary-button {
+    min-height: 44px;
+    padding: 0 14px;
+  }
+
+  .practice-actions {
+    margin-bottom: 10px;
+  }
+
+  .grade-form {
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  textarea {
+    min-height: 110px;
+    width: 100%;
+  }
+
+  .ask-form {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .ask-form .primary-button {
+    width: 100%;
+  }
+
+  .formula-block,
+  .metric-item {
+    padding: 12px;
+  }
+
+  .metric-panel {
+    margin-top: 12px;
+  }
+
+  .stats-footer-row {
+    display: grid;
+    gap: 10px;
+  }
+
+  .stats-panel {
+    display: flex;
+    min-width: 0;
+    flex-wrap: wrap;
+    gap: 0;
+    line-height: 1.8;
+  }
+
+  .stat-item {
+    display: inline-flex;
+    align-items: baseline;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    background: transparent;
+    gap: 4px;
+  }
+
+  .stat-item:not(:last-child)::after {
+    content: "|";
+    margin: 0 8px;
+    color: var(--line);
+  }
+
+  .stat-item span {
+    font-size: 0.95rem;
+  }
+
+  .stat-item strong {
+    font-size: 1rem;
+  }
+
+  .stats-card .secondary-button {
+    width: 100%;
+    flex: none;
+  }
+}
+
 @media (max-width: 900px) {
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1154,7 +1426,7 @@ a:focus-visible {
 
 @media (max-width: 520px) {
   .custom-interactive-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(126px, 0.72fr);
+    grid-template-columns: 1fr;
     gap: 8px;
   }
 
@@ -1169,6 +1441,40 @@ a:focus-visible {
 }
 
 @media (max-width: 350px) {
+  .custom-interactive-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .visual-card {
+    order: 1;
+  }
+
+  .interactive-card {
+    order: 2;
+  }
+
+  .practice-card {
+    order: 3;
+  }
+
+  .result-card {
+    order: 4;
+  }
+
+  .ask-card {
+    order: 5;
+  }
+
+  .controls-card {
+    order: 6;
+  }
+
+  .stats-card {
+    order: 7;
+  }
+
   .custom-interactive-layout {
     grid-template-columns: 1fr;
   }

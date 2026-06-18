@@ -493,6 +493,11 @@ input[type="range"] {
   border-color: #f3d59a;
 }
 
+.answer-box strong {
+  color: var(--blue-900);
+  font-weight: 800;
+}
+
 .primary-button,
 .secondary-button {
   min-height: 42px;

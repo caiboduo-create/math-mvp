@@ -343,6 +343,37 @@
     return data.answer || "AI 暂时没有返回内容。";
   }
 
+  function escapeHtml(value) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function formatAiAnswerHtml(rawText) {
+    const cleanedText = String(rawText || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/```[a-zA-Z0-9_-]*\n?/g, "")
+      .replace(/```/g, "")
+      .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+      .replace(/^\s{0,3}[-*_]{3,}\s*$/gm, "")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+
+    return escapeHtml(cleanedText)
+      .replace(/\*\*([\s\S]*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*\*/g, "")
+      .replace(/`/g, "")
+      .replace(/\n/g, "<br>");
+  }
+
+  function renderAskResult(message) {
+    askResult.hidden = false;
+    askResult.innerHTML = formatAiAnswerHtml(message);
+  }
+
   function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
@@ -697,18 +728,16 @@
     const question = askInput.value.trim();
 
     if (!question) {
-      askResult.hidden = false;
-      askResult.textContent = "请输入一个问题。";
+      renderAskResult("请输入一个问题。");
       return;
     }
 
-    askResult.hidden = false;
-    askResult.textContent = "AI 正在思考...";
+    renderAskResult("AI 正在思考...");
 
     try {
-      askResult.textContent = await askAi(question);
+      renderAskResult(await askAi(question));
     } catch (error) {
-      askResult.textContent = error.message || "请通过 npm start 启动服务后再使用问AI。";
+      renderAskResult(error.message || "请通过 npm start 启动服务后再使用问AI。");
     }
   });
 

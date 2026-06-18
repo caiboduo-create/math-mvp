@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>数学模型 - AI数学学习产品V4</title>
+    <link rel="stylesheet" href="css/styles.css" />
+  </head>
+  <body>
+    <header class="site-header compact">
+      <div class="shell header-inner">
+        <a class="back-link" href="index.html" aria-label="返回首页">← 返回首页</a>
+        <div>
+          <p class="eyebrow">AI数学学习产品V4</p>
+          <h1 id="modelTitle">加载中</h1>
+        </div>
+        <div class="mistake-pill" id="mistakeCount">本模型错题数量：0</div>
+      </div>
+    </header>
+
+    <main class="shell page-main model-grid">
+      <section class="card visual-card">
+        <div class="card-heading">
+          <h2>SVG动态图</h2>
+          <p id="modelDescription"></p>
+        </div>
+        <svg id="modelSvg" class="model-svg" role="img" aria-label="模型动态图"></svg>
+      </section>
+
+      <section class="card controls-card">
+        <div class="card-heading">
+          <h2>参数滑块</h2>
+        </div>
+        <div id="sliderPanel" class="slider-panel"></div>
+        <div id="metricPanel" class="metric-panel"></div>
+      </section>
+
+      <section class="card ai-card">
+        <div class="card-heading">
+          <h2>AI讲解</h2>
+        </div>
+        <div id="aiExplanation" class="content-box"></div>
+      </section>
+
+      <section class="card exercise-card">
+        <div class="card-heading">
+          <h2>练习题</h2>
+        </div>
+        <div id="exerciseQuestion" class="content-box"></div>
+        <button class="secondary-button" id="answerToggle" type="button">查看答案</button>
+        <div id="exerciseAnswer" class="answer-box" hidden></div>
+      </section>
+
+      <section class="card practice-card">
+        <div class="card-heading">
+          <h2>AI出题</h2>
+          <p>根据当前模型和参数生成应用题，并支持自动批改。</p>
+        </div>
+        <div class="practice-actions">
+          <button class="primary-button" id="generateProblemButton" type="button">🧠 AI出题</button>
+        </div>
+        <div id="aiProblemBox" class="content-box muted-box">点击“AI出题”后，这里会显示题目和解法提示。</div>
+        <form id="gradeForm" class="grade-form" hidden>
+          <label class="answer-label" for="studentAnswer">你的答案</label>
+          <textarea id="studentAnswer" rows="4" placeholder="写下你的计算过程或最终答案"></textarea>
+          <button class="primary-button" type="submit">提交批改</button>
+        </form>
+        <div id="gradeResult" class="grade-result-card" hidden></div>
+      </section>
+
+      <section class="card ask-card">
+        <div class="card-heading">
+          <h2>问AI</h2>
+        </div>
+        <form id="askForm" class="ask-form">
+          <textarea id="askInput" rows="4" placeholder="输入你的问题"></textarea>
+          <button class="primary-button" type="submit">发送问题</button>
+        </form>
+        <div id="askResult" class="answer-box" hidden></div>
+      </section>
+    </main>
+
+    <script src="models.js"></script>
+    <script src="js/model-page.js"></script>
+  </body>
+</html>

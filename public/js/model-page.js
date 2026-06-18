@@ -823,7 +823,7 @@
           ? Number(source.answerValue)
           : source.answerValue;
 
-    return {
+    const normalized = {
       ...fallbackProblem,
       ...source,
       question: source.question.trim(),
@@ -842,6 +842,16 @@
       explanation: source.explanation || fallbackProblem?.explanation || "根据题意列式或按概念判断。",
       type: source.type || fallbackProblem?.type || "generated-question"
     };
+    if (window.TeachingEngine?.structureQuestion && model) {
+      return window.TeachingEngine.structureQuestion(normalized, {
+        modelId: model.id,
+        chapter: model.name,
+        domain: model.domain,
+        grade: model.grade,
+        knowledgePoint: normalized.knowledge_point || model.name
+      });
+    }
+    return normalized;
   }
 
   function buildUniqueLocalQuestion() {

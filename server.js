@@ -37,6 +37,40 @@ const CHAPTER_RULES = {
       "允许的知识点包括：随机事件、必然事件、不可能事件、可能事件、简单概率、概率 = 目标结果数 / 所有等可能结果数、摸球问题、抛硬币问题、掷骰子问题、抽签问题、转盘问题。",
       "禁止生成：相似三角形、锐角三角函数、sin、cos、tan、几何证明、一元二次方程、函数图像、代数化简、面积公式、勾股定理。"
     ]
+  },
+  "相似三角形": {
+    allowedKnowledgePoints: [
+      "相似三角形",
+      "相似三角形比例",
+      "对应边",
+      "相似比",
+      "相似三角形未知边"
+    ],
+    forbiddenPattern: /概率|随机|骰子|摸球|硬币|转盘|sin|cos|tan|锐角三角函数|面积公式除以2|圆|函数图像|方程求解/i,
+    promptLines: [
+      "当前章节是“相似三角形”，只能生成相似三角形比例、对应边、相似比、未知边相关题目。",
+      "禁止生成概率、三角函数、sin/cos/tan、圆面积、方程、函数图像等跨章节内容。",
+      "题目必须清楚标明两个三角形相似、对应边关系和相似比。"
+    ]
+  },
+  "锐角三角函数": {
+    allowedKnowledgePoints: [
+      "锐角三角函数",
+      "sin_basic",
+      "cos_basic",
+      "tan_basic",
+      "特殊角",
+      "直角三角形三角函数",
+      "sin45°",
+      "sin30°",
+      "sin60°"
+    ],
+    forbiddenPattern: /概率|随机|骰子|摸球|硬币|转盘|相似三角形比例|函数图像|一元二次方程|代数化简/i,
+    promptLines: [
+      "当前章节是“锐角三角函数”，只能生成直角三角形中的 sin、cos、tan、特殊角三角函数值相关题目。",
+      "禁止生成概率、相似三角形比例、函数图像、一元二次方程、纯代数化简等跨章节内容。",
+      "如果题目要求化简，必须说明例如 1/√2 = √2/2 的最终形式。"
+    ]
   }
 };
 
@@ -267,6 +301,8 @@ function probabilityFallbackQuestion(context) {
     answerType: "number",
     analysis: "等可能事件的概率 = 目标结果数 ÷ 所有等可能结果数。",
     explanation: "等可能事件的概率 = 目标结果数 ÷ 所有等可能结果数。",
+    templateType: "probability_simple",
+    unknown: "probability",
     commonMistakes: ["把目标结果数当成分母", "漏数所有等可能结果"],
     errorTags: ["概率公式", "总数遗漏"],
     type: context.questionType || "基础练习"
@@ -618,6 +654,18 @@ function normalizeGeneratedQuestion(value, fallback = null) {
     commonMistakes: Array.isArray(parsed?.commonMistakes)
       ? parsed.commonMistakes.map((item) => String(item || "").trim()).filter(Boolean)
       : [],
+    templateType: typeof parsed?.templateType === "string" && parsed.templateType.trim()
+      ? parsed.templateType.trim()
+      : fallback?.templateType,
+    visual_type: typeof parsed?.visual_type === "string" && parsed.visual_type.trim()
+      ? parsed.visual_type.trim()
+      : fallback?.visual_type,
+    knownValues: parsed?.knownValues && typeof parsed.knownValues === "object"
+      ? parsed.knownValues
+      : fallback?.knownValues,
+    unknown: typeof parsed?.unknown === "string" && parsed.unknown.trim()
+      ? parsed.unknown.trim()
+      : fallback?.unknown,
     variantStyle: typeof parsed?.variantStyle === "string" && parsed.variantStyle.trim() ? parsed.variantStyle.trim() : undefined,
     errorTags: Array.isArray(parsed?.errorTags)
       ? parsed.errorTags.map((item) => String(item || "").trim()).filter(Boolean)
@@ -956,6 +1004,7 @@ async function handleGenerateQuestion(req, res) {
       "你是 AI数学陪练小程序的出题引擎，面向小学1-6年级和初中7-9年级学生。",
       "只能返回一个 JSON 对象，不允许 Markdown、代码块或多余解释。",
       "JSON 必须包含 question、standardAnswer、answerType、difficulty、knowledgePoints、solutionSteps、commonMistakes。",
+      "JSON 还必须包含 templateType、knownValues、unknown。templateType 只能使用固定教学模板，例如 probability_simple、similar_triangle_ratio、right_triangle_trig、equation_solving、area_formula、number_line、function_graph。knownValues 用来稳定渲染动画，不允许让前端靠自然语言猜图示。",
       "answerType 只能是 number、expression、text、judgment 之一；knowledgePoints、solutionSteps、commonMistakes 必须是字符串数组。",
       "为了兼容旧前端，也可以同时返回 answer、analysis、knowledge_point、type、aliases、answerValue、variantStyle、errorTags。",
       "如果返回 answer，必须与 standardAnswer 完全一致；如果返回 analysis，必须概括 solutionSteps。",

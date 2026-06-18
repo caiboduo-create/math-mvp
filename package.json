@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "test": "node scripts/test-answer-utils.cjs && node scripts/test-trigonometry-wording.cjs"
+    "test": "node scripts/test-answer-utils.cjs && node scripts/test-trigonometry-wording.cjs && node scripts/test-teaching-engine.cjs"
   },
   "keywords": [],
   "author": "",

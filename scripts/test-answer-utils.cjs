@@ -23,6 +23,7 @@ const cases = [
   { correctAnswer: "1/3", userAnswer: "0.3333333333", expected: true },
   { correctAnswer: "1/2", userAnswer: "0.6", expected: false },
   { correctAnswer: "1/2", userAnswer: "50%", expected: true },
+  { correctAnswer: "20厘米", userAnswer: "20", expected: true },
   { correctAnswer: " 1 / 2 ", userAnswer: ".5", expected: true },
   { correctAnswer: "２／４", userAnswer: "0.5", expected: true },
   { correctAnswer: "√2/2", userAnswer: String(Math.sqrt(2) / 2), expected: true }

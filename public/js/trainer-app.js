@@ -388,6 +388,7 @@
   function buildQuestionContext(topicItem, localQuestion, mode) {
     const parts = stageParts(topicItem.stageLabel);
     return {
+      modelId: topicItem.id,
       schoolStage: parts.schoolStage,
       subject: parts.subject,
       grade: topicItem.grade,
@@ -397,6 +398,20 @@
       difficulty: localQuestion?.difficulty || selectDifficultyForMode(mode),
       questionType: MODE_LABELS[mode] || localQuestion?.type || "基础练习"
     };
+  }
+
+  function structureTeachingQuestion(question, context = {}) {
+    if (window.TeachingEngine?.structureQuestion) {
+      return window.TeachingEngine.structureQuestion(question, context);
+    }
+    return question;
+  }
+
+  function validateTeachingQuestion(question, context = {}) {
+    if (window.TeachingEngine?.validateQuestion) {
+      return window.TeachingEngine.validateQuestion(question, context);
+    }
+    return { valid: true, reason: "", question };
   }
 
   function selectDifficultyForMode(mode) {
@@ -978,15 +993,20 @@
               difficulty: localQuestion.difficulty,
               type: localQuestion.type,
               questionType: localQuestion.questionType || context.questionType,
-              variantStyle: localQuestion.variantStyle
+              variantStyle: localQuestion.variantStyle,
+              templateType: localQuestion.templateType,
+              visual_type: localQuestion.visual_type,
+              knownValues: localQuestion.knownValues,
+              unknown: localQuestion.unknown
             }
           })
         });
         const data = await response.json();
         const normalized = normalizeQuestion(data, topicItem, localQuestion.difficulty, localQuestion);
-        if (normalized.question && normalized.answer) {
+        const validation = validateTeachingQuestion(normalized, context);
+        if (normalized.question && normalized.answer && validation.valid) {
           window.clearTimeout(timeoutId);
-          return normalized;
+          return validation.question || normalized;
         }
       } catch (error) {
         if (error?.name === "AbortError") {
@@ -1027,7 +1047,7 @@
     const answerValue = Number.isFinite(numericAnswerValue)
       ? numericAnswerValue
       : semanticAnswerValue ?? fallback.answerValue ?? extractNumbers(answer)[0];
-    return normalizeSignedSemanticQuestion({
+    const normalized = normalizeSignedSemanticQuestion({
       ...fallback,
       id: `q_${Date.now()}_${randomInt(1000, 9999)}`,
       grade: topicItem.grade,
@@ -1055,7 +1075,18 @@
           ? data.commonMistakes
           : fallback.errorTags,
       commonMistake: fallback.commonMistake,
-      variantStyle: String(data?.variantStyle || fallback.variantStyle || "AI变式").trim()
+      variantStyle: String(data?.variantStyle || fallback.variantStyle || "AI变式").trim(),
+      templateType: data?.templateType || fallback.templateType,
+      visual_type: data?.visual_type || fallback.visual_type,
+      knownValues: data?.knownValues || fallback.knownValues,
+      unknown: data?.unknown || fallback.unknown
+    });
+    return structureTeachingQuestion(normalized, {
+      modelId: topicItem.id,
+      chapter: topicItem.title,
+      domain: topicItem.domain,
+      grade: topicItem.grade,
+      knowledgePoint: normalized.knowledge_point
     });
   }
 
@@ -1156,7 +1187,7 @@
         ]
       : partial.steps || [];
 
-    return normalizeSignedSemanticQuestion({
+    const normalized = normalizeSignedSemanticQuestion({
       id: `q_${Date.now()}_${randomInt(1000, 9999)}`,
       grade: topicItem.grade,
       stage: topicItem.stageLabel,
@@ -1183,6 +1214,13 @@
       errorTags: partial.errorTags || ["方法选择"],
       commonMistake: partial.commonMistake || "只看数字，不看题目要求。",
       variantStyle
+    });
+    return structureTeachingQuestion(normalized, {
+      modelId: topicItem.id,
+      chapter: topicItem.title,
+      domain: topicItem.domain,
+      grade: topicItem.grade,
+      knowledgePoint: normalized.knowledge_point
     });
   }
 
@@ -1800,6 +1838,14 @@
       question: `两个三角形相似，对应边之比为 ${ratio}:1。小三角形一条边长 ${side} 厘米，大三角形对应边长多少厘米？`,
       answer: `${ratio * side}厘米`,
       answerValue: ratio * side,
+      templateType: "similar_triangle_ratio",
+      knownValues: {
+        ratioBigToSmall: ratio,
+        smallSide: side,
+        bigSide: ratio * side,
+        unit: "厘米"
+      },
+      unknown: "bigSide",
       aliases: [String(ratio * side)],
       steps: stepList([`对应边按同一比例变化`, `${side} × ${ratio} = ${ratio * side}`]),
       explanation: "相似图形对应边成比例。",
@@ -1814,6 +1860,14 @@
         type: "等腰直角三角形",
         question: "一个等腰直角三角形，两条直角边都为1，求斜边长度是多少？",
         answer: "√2",
+        templateType: "right_triangle_trig",
+        knownValues: {
+          angle: 45,
+          opposite: 1,
+          adjacent: 1,
+          hypotenuse: "√2"
+        },
+        unknown: "hypotenuse",
         aliases: ["根号2", "sqrt2", "sqrt(2)"],
         steps: stepList([
           "画出等腰直角三角形，两条直角边都是 1",
@@ -1830,6 +1884,14 @@
       type: "sin45°",
       question: "一个等腰直角三角形，两条直角边都为1，斜边为√2，求 sin45° 的值是多少？",
       answer: "√2/2",
+      templateType: "right_triangle_trig",
+      knownValues: {
+        angle: 45,
+        opposite: 1,
+        adjacent: 1,
+        hypotenuse: "√2"
+      },
+      unknown: "sin45",
       aliases: ["根号2/2", "√2÷2", "1/√2", "1÷√2"],
       steps: stepList([
         "画出等腰直角三角形，两个锐角都是 45°",
@@ -1899,6 +1961,7 @@
     return baseQuestion(topicItem, mode, {
       ...partial,
       answerType: "number",
+      templateType: "probability_simple",
       explanation: "等可能事件的概率 = 目标结果数 ÷ 所有可能结果数。",
       errorTags: ["总数遗漏", "概率公式"],
       commonMistake: "只数目标结果，忘记把所有等可能结果作为分母。"
@@ -2245,6 +2308,17 @@
   }
 
   function buildAnimationLesson(question, result) {
+    const engineLesson = window.TeachingEngine?.buildAnimationLesson?.(question, result);
+    if (engineLesson?.animation_steps?.length) {
+      question.templateType = engineLesson.templateType;
+      question.visual_type = engineLesson.visual_type;
+      question.knownValues = engineLesson.knownValues || {};
+      question.animation_steps = engineLesson.animation_steps;
+      question.common_mistakes = engineLesson.common_mistakes;
+      question.summary = engineLesson.summary;
+      return engineLesson;
+    }
+
     const visualType = visualTypeForQuestion(question);
     if (!visualType) {
       return null;
@@ -2452,6 +2526,130 @@
     `;
   }
 
+  function renderProbabilityStage(lesson, stepIndex) {
+    const known = lesson.knownValues || {};
+    const answer = lesson.answer || currentQuestion?.answer || "";
+    const fraction = String(answer).match(/(\d+)\s*\/\s*(\d+)/);
+    const targetCount = Math.max(1, Math.round(Number(known.targetCount || fraction?.[1] || 1)));
+    const totalCount = Math.max(targetCount, Math.round(Number(known.totalCount || fraction?.[2] || targetCount + 1)));
+    const visibleTotal = Math.min(totalCount, 12);
+    const visibleTarget = Math.min(targetCount, visibleTotal);
+    const showTargets = stepIndex >= 1;
+    const showFormula = stepIndex >= 2 || stepIndex >= lesson.animation_steps.length - 1;
+    const items = Array.from({ length: visibleTotal }, (_, index) => {
+      const x = 58 + (index % 6) * 44;
+      const y = 82 + Math.floor(index / 6) * 46;
+      const isTarget = index < visibleTarget;
+      const cls = isTarget && showTargets ? "object-blue is-active" : "object-muted";
+      return `
+        <g class="probability-item">
+          <circle cx="${x}" cy="${y}" r="15" class="${cls}"></circle>
+          <text x="${x}" y="${y + 5}" class="mini-label">${index + 1}</text>
+        </g>
+      `;
+    }).join("");
+    return `
+      <svg viewBox="0 0 360 230" class="lecture-svg probability-svg" role="img" aria-label="概率动画讲解">
+        <rect x="14" y="14" width="332" height="202" rx="18" fill="#f8fbff"></rect>
+        <text x="28" y="42" class="stage-caption">先数所有等可能结果，再数目标结果</text>
+        <g class="${stepIndex === 0 ? "is-active" : ""}">${items}</g>
+        <g class="formula-card ${showFormula ? "is-active" : ""}">
+          <rect x="56" y="176" width="248" height="38" rx="19"></rect>
+          <text x="180" y="201">概率 = ${targetCount} / ${totalCount} = ${escapeHTML(answer)}</text>
+        </g>
+      </svg>
+    `;
+  }
+
+  function renderSimilarTriangleStage(lesson, stepIndex) {
+    const known = lesson.knownValues || {};
+    const ratio = known.ratioBigToSmall || 2;
+    const smallSide = known.smallSide || 3;
+    const bigSide = known.bigSide || extractNumbers(lesson.answer || currentQuestion?.answer)[0] || ratio * smallSide;
+    const unit = known.unit || "";
+    const showLabels = stepIndex >= 1;
+    const showResult = stepIndex >= lesson.animation_steps.length - 1;
+    return `
+      <svg viewBox="0 0 360 240" class="lecture-svg geometry-svg similar-triangle-svg" role="img" aria-label="相似三角形对应边动画讲解">
+        <defs>
+          <marker id="similarLectureArrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"></path>
+          </marker>
+        </defs>
+        <rect x="14" y="14" width="332" height="212" rx="18" fill="#f8fbff"></rect>
+        <text x="28" y="42" class="stage-caption">相似三角形：对应边按同一个比例变化</text>
+        <path d="M54 176 L142 176 L82 98 Z" class="shape-line ${stepIndex === 0 ? "is-active" : ""}"></path>
+        <path d="M202 176 L322 176 L238 72 Z" class="shape-line ${stepIndex === 0 ? "is-active" : ""}"></path>
+        ${showLabels ? `
+          <text x="76" y="196" class="point-label">小：${escapeHTML(String(smallSide))}${escapeHTML(unit)}</text>
+          <text x="236" y="196" class="point-label ${showResult ? "" : "is-active"}">大：?</text>
+          <path d="M142 132 C170 112, 190 112, 214 132" class="move-arrow is-active" marker-end="url(#similarLectureArrow)"></path>
+          <g class="formula-card is-active">
+            <rect x="112" y="52" width="136" height="34" rx="17"></rect>
+            <text x="180" y="74">大 : 小 = ${escapeHTML(String(ratio))} : 1</text>
+          </g>
+        ` : ""}
+        ${showResult ? `
+          <g class="result-badge is-active">
+            <rect x="92" y="106" width="176" height="42" rx="21"></rect>
+            <text x="180" y="133">${escapeHTML(String(smallSide))} × ${escapeHTML(String(ratio))} = ${escapeHTML(String(bigSide))}${escapeHTML(unit)}</text>
+          </g>
+          <text x="236" y="196" class="result-label">大：${escapeHTML(String(bigSide))}${escapeHTML(unit)}</text>
+        ` : ""}
+      </svg>
+    `;
+  }
+
+  function renderEquationStage(lesson, stepIndex) {
+    const answer = lesson.answer || currentQuestion?.answer || "x";
+    const showOperation = stepIndex >= 1;
+    const showResult = stepIndex >= lesson.animation_steps.length - 1;
+    return `
+      <svg viewBox="0 0 360 230" class="lecture-svg equation-svg" role="img" aria-label="方程天平动画讲解">
+        <rect x="14" y="14" width="332" height="202" rx="18" fill="#f8fbff"></rect>
+        <text x="28" y="42" class="stage-caption">等式两边必须同时做相同操作</text>
+        <line x1="180" y1="72" x2="180" y2="160" class="zero-mark"></line>
+        <line x1="78" y1="94" x2="282" y2="94" class="axis-line ${showOperation ? "" : "is-active"}"></line>
+        <path d="M78 94 L54 144 L132 144 Z" class="shape-line"></path>
+        <path d="M282 94 L230 144 L308 144 Z" class="shape-line"></path>
+        <text x="92" y="133" class="point-label">含 x 的一边</text>
+        <text x="252" y="133" class="point-label">常数一边</text>
+        ${showOperation ? `
+          <g class="formula-card is-active">
+            <rect x="62" y="166" width="236" height="38" rx="19"></rect>
+            <text x="180" y="191">两边同步化简</text>
+          </g>
+        ` : ""}
+        ${showResult ? `
+          <g class="result-badge is-active">
+            <rect x="104" y="54" width="152" height="38" rx="19"></rect>
+            <text x="180" y="79">${escapeHTML(answer)}</text>
+          </g>
+        ` : ""}
+      </svg>
+    `;
+  }
+
+  function renderFunctionGraphStage(lesson, stepIndex) {
+    const showCurve = stepIndex >= 1;
+    const showResult = stepIndex >= lesson.animation_steps.length - 1;
+    return `
+      <svg viewBox="0 0 360 230" class="lecture-svg function-svg" role="img" aria-label="函数图像动画讲解">
+        <rect x="14" y="14" width="332" height="202" rx="18" fill="#f8fbff"></rect>
+        <text x="28" y="42" class="stage-caption">把函数关系放到坐标系中观察</text>
+        <line x1="54" y1="160" x2="310" y2="160" class="axis-line"></line>
+        <line x1="176" y1="48" x2="176" y2="190" class="axis-line"></line>
+        <path d="M64 172 C116 58, 236 58, 298 172" class="shape-line ${showCurve ? "is-active" : ""}"></path>
+        ${showResult ? `
+          <g class="result-badge is-active">
+            <rect x="74" y="72" width="212" height="40" rx="20"></rect>
+            <text x="180" y="98">${escapeHTML(currentQuestion?.answer || lesson.answer)}</text>
+          </g>
+        ` : ""}
+      </svg>
+    `;
+  }
+
   function renderCartoonStage(lesson, stepIndex) {
     const numbers = extractNumbers(lesson.question);
     const first = Math.max(1, Math.min(6, Math.abs(numbers[0] || 4)));
@@ -2512,6 +2710,27 @@
   function renderLectureStage(lesson, stepIndex) {
     if (lesson.visual_type === "number_line") {
       return renderNumberLineStage(lesson, stepIndex);
+    }
+    if (lesson.visual_type === "probability") {
+      return renderProbabilityStage(lesson, stepIndex);
+    }
+    if (lesson.visual_type === "similar_triangle") {
+      return renderSimilarTriangleStage(lesson, stepIndex);
+    }
+    if (lesson.visual_type === "right_triangle_trig") {
+      return renderIsoscelesRightTriangleStage(lesson, stepIndex);
+    }
+    if (lesson.visual_type === "equation") {
+      return renderEquationStage(lesson, stepIndex);
+    }
+    if (lesson.visual_type === "function_graph") {
+      return renderFunctionGraphStage(lesson, stepIndex);
+    }
+    if (lesson.visual_type === "cartoon") {
+      return renderCartoonStage(lesson, stepIndex);
+    }
+    if (lesson.visual_type === "scene") {
+      return renderSceneStage(lesson, stepIndex);
     }
     if (lesson.visual_type === "geometry") {
       return renderGeometryStage(lesson, stepIndex);

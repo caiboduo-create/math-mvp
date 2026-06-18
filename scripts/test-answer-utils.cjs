@@ -12,7 +12,7 @@ const sandbox = {
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox);
 
-const { isAnswerCorrect, parseMathValue } = sandbox.module.exports;
+const { isAnswerCorrect, parseMathValue, gradeAnswerDetailed } = sandbox.module.exports;
 
 const cases = [
   { correctAnswer: "1/2", userAnswer: "0.5", expected: true },
@@ -39,5 +39,22 @@ for (const item of cases) {
 assert.strictEqual(parseMathValue("1 / 2"), 0.5);
 assert.strictEqual(parseMathValue("50%"), 0.5);
 assert.strictEqual(parseMathValue(".5"), 0.5);
+assert.ok(Math.abs(parseMathValue("1/√2") - Math.SQRT1_2) < 1e-9);
+
+const judgmentQuestion = {
+  question: "一个等腰直角三角形，两条直角边都为1，斜边为√2。若一个同学说 sin45° = 1/√2，这个答案正确吗？如果正确，请化简；如果不正确，请说明理由。",
+  answer: "正确，1/√2 = √2/2。",
+  steps: ["sin45° = 对边 / 斜边", "sin45° = 1 / √2", "1/√2 = √2/2"]
+};
+
+assert.deepStrictEqual(
+  {
+    result: gradeAnswerDetailed("正确", judgmentQuestion.answer, judgmentQuestion).result,
+    score: gradeAnswerDetailed("正确", judgmentQuestion.answer, judgmentQuestion).score
+  },
+  { result: "partial", score: 60 }
+);
+assert.strictEqual(gradeAnswerDetailed("正确，化简为√2/2", judgmentQuestion.answer, judgmentQuestion).result, "correct");
+assert.strictEqual(gradeAnswerDetailed("错误", judgmentQuestion.answer, judgmentQuestion).result, "wrong");
 
 console.log(`answer-utils tests passed: ${cases.length} cases`);

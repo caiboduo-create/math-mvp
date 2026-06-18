@@ -494,6 +494,11 @@
   background: #fff6f6;
 }
 
+.grade-result.partial {
+  border-color: #f6d58a;
+  background: #fffaf0;
+}
+
 .grade-result.warning {
   border-color: #ffe0a8;
   background: #fffaf0;
@@ -2831,6 +2836,12 @@ input[type="range"] {
   border-color: #f3a7a7;
   background: #fff1f2;
   color: #7f1d1d;
+}
+
+.grade-result-card.is-partial {
+  border-color: #f0c76b;
+  background: #fff8e7;
+  color: #7c4a03;
 }
 
 .ask-form {

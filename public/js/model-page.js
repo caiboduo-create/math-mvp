@@ -1053,7 +1053,7 @@
   }
 
   async function gradeAnswerWithAi(problem, userAnswer) {
-    const response = await fetch("/api/grade-answer", {
+    const response = await fetch("/api/ai/grade-answer", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1062,6 +1062,10 @@
         answerValue: problem.answerValue,
         aliases: problem.aliases || problem.acceptedTexts || [],
         userAnswer,
+        gradeLevel: model.grade,
+        topic: model.name,
+        answerType: problem.answerType,
+        steps: problem.steps || [],
         modelId: model.id
       })
     });
@@ -1073,20 +1077,52 @@
     return response.json();
   }
 
-  function renderGradeResult(problem, userAnswer, correct, extraFeedback = "") {
+  function normalizeGradeDetail(detail, problem, correct, extraFeedback = "") {
+    const result = ["correct", "partial", "wrong"].includes(detail?.result)
+      ? detail.result
+      : correct
+        ? "correct"
+        : "wrong";
+    return {
+      result,
+      correct: result === "correct",
+      score: Number.isFinite(Number(detail?.score)) ? Number(detail.score) : result === "correct" ? 100 : 0,
+      standardAnswer: detail?.standardAnswer || problem.answer,
+      missingPoints: Array.isArray(detail?.missingPoints) ? detail.missingPoints : [],
+      wrongReason: detail?.wrongReason || detail?.reason || "",
+      feedbackToStudent: detail?.feedbackToStudent || detail?.feedback || extraFeedback || "",
+      stepByStepExplanation: Array.isArray(detail?.stepByStepExplanation) && detail.stepByStepExplanation.length > 0
+        ? detail.stepByStepExplanation
+        : problem.steps || [],
+      nextHint: detail?.nextHint || "",
+      fallbackMessage: detail?.fallbackMessage || ""
+    };
+  }
+
+  function renderGradeResult(problem, userAnswer, correct, extraFeedback = "", gradeDetail = null) {
+    const detail = normalizeGradeDetail(gradeDetail, problem, correct, extraFeedback);
+    const resultLabel = detail.result === "partial" ? "部分正确" : detail.correct ? "完全正确" : "错误";
     resultCard.hidden = false;
     gradeResult.hidden = false;
-    gradeResult.className = `grade-result-card ${correct ? "is-correct" : "is-wrong"}`;
+    gradeResult.className = `grade-result-card ${detail.result === "partial" ? "is-partial" : detail.correct ? "is-correct" : "is-wrong"}`;
     const sections = [
-      createProblemSection("是否正确", correct ? "正确" : "错误"),
+      createProblemSection("判断结果", `${resultLabel}（${Math.round(detail.score)}分）`),
       createProblemSection("你的答案", userAnswer),
-      createProblemSection("正确答案", problem.answer),
-      createProblemSection("解题步骤", problem.steps),
+      createProblemSection("正确答案", detail.standardAnswer),
+      createProblemSection("解题步骤", detail.stepByStepExplanation),
       createProblemSection("简单讲解", problem.explanation)
     ];
 
-    if (extraFeedback) {
-      sections.push(createProblemSection("批改反馈", extraFeedback));
+    if (detail.missingPoints.length > 0) {
+      sections.push(createProblemSection("需要补充", detail.missingPoints));
+    }
+
+    if (detail.feedbackToStudent || detail.wrongReason || detail.fallbackMessage) {
+      sections.push(createProblemSection("批改反馈", detail.feedbackToStudent || detail.wrongReason || detail.fallbackMessage));
+    }
+
+    if (detail.nextHint) {
+      sections.push(createProblemSection("下一步提示", detail.nextHint));
     }
 
     gradeResult.replaceChildren(...sections);
@@ -1147,25 +1183,33 @@
       return;
     }
 
-    let correct = gradeAnswerLocally(userAnswer, currentQuestion);
-    let feedback = "";
+    const detailed = window.AnswerJudgement?.gradeAnswerDetailed?.(userAnswer, currentQuestion.answer, currentQuestion);
+    let gradeDetail = detailed && detailed.result !== "unknown" ? detailed : null;
+    let correct = gradeDetail ? gradeDetail.result === "correct" : gradeAnswerLocally(userAnswer, currentQuestion);
+    let feedback = gradeDetail?.feedbackToStudent || "";
     const mathFeedback = window.AnswerJudgement?.explainAnswerMatch?.(userAnswer, currentQuestion.answer, currentQuestion);
     if (correct === true && mathFeedback?.equivalent && mathFeedback.reason) {
-      feedback = mathFeedback.reason;
+      feedback = feedback || mathFeedback.reason;
     }
 
-    if (correct === null) {
+    if (correct !== true) {
       try {
         const aiGrade = await gradeAnswerWithAi(currentQuestion, userAnswer);
-        correct = Boolean(aiGrade.isCorrect);
-        feedback = aiGrade.feedback || aiGrade.reason || "";
+        gradeDetail = aiGrade;
+        correct = aiGrade.result === "correct" || Boolean(aiGrade.isCorrect);
+        feedback = aiGrade.feedbackToStudent || aiGrade.feedback || aiGrade.reason || "";
       } catch (error) {
-        correct = false;
-        feedback = "本地规则无法确认该答案，已按标准答案判为需要订正。";
+        correct = gradeDetail ? gradeDetail.result === "correct" : false;
+        gradeDetail = gradeDetail || {
+          result: correct ? "correct" : "wrong",
+          score: correct ? 100 : 0,
+          feedbackToStudent: "AI讲解暂时不可用，已使用基础判题。"
+        };
+        feedback = gradeDetail.feedbackToStudent;
       }
     }
 
-    renderGradeResult(currentQuestion, userAnswer, correct, feedback);
+    renderGradeResult(currentQuestion, userAnswer, correct, feedback, gradeDetail);
     incrementStats(correct);
     recordMistake(currentQuestion.question, userAnswer, correct);
   });

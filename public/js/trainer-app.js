@@ -849,7 +849,7 @@
       return;
     }
 
-    submitButton.addEventListener("click", () => {
+    submitButton.addEventListener("click", async () => {
       const input = app.querySelector("#trainerAnswer");
       const userAnswer = input ? input.value.trim() : "";
       if (!currentQuestion) {
@@ -861,16 +861,26 @@
         return;
       }
       const timeSpentSeconds = currentQuestionStartedAt ? Math.round((Date.now() - currentQuestionStartedAt) / 1000) : 0;
-      currentResult = gradeCurrentQuestion(userAnswer);
-      const updatedProfile = recordAttempt(topicItem, currentQuestion, userAnswer, currentResult, timeSpentSeconds);
-      currentResult.feedback = buildLearningFeedback(currentQuestion, currentResult, updatedProfile);
-      currentResult.memorySummary = buildMemorySummary(currentQuestion, currentResult);
-      const result = app.querySelector("#gradeResult");
-      if (result) {
-        result.innerHTML = renderGradeResult(currentResult);
-        bindAnimationLectureEvents();
+      submitButton.disabled = true;
+      submitButton.textContent = "批改中...";
+
+      try {
+        currentResult = await gradeCurrentQuestionSmart(userAnswer);
+        const updatedProfile = recordAttempt(topicItem, currentQuestion, userAnswer, currentResult, timeSpentSeconds);
+        const teacherFeedback = currentResult.feedbackToStudent || currentResult.feedback || "";
+        const learningFeedback = buildLearningFeedback(currentQuestion, currentResult, updatedProfile);
+        currentResult.feedback = teacherFeedback ? `${teacherFeedback} ${learningFeedback}` : learningFeedback;
+        currentResult.memorySummary = buildMemorySummary(currentQuestion, currentResult);
+        const result = app.querySelector("#gradeResult");
+        if (result) {
+          result.innerHTML = renderGradeResult(currentResult);
+          bindAnimationLectureEvents();
+        }
+        renderStatus();
+      } finally {
+        submitButton.disabled = false;
+        submitButton.textContent = "提交答案";
       }
-      renderStatus();
     });
   }
 
@@ -1862,8 +1872,49 @@
     });
   }
 
+  function normalizeTrainerGrade(detail, userAnswer, question, fallback = null) {
+    const result = ["correct", "partial", "wrong"].includes(detail?.result)
+      ? detail.result
+      : detail?.isCorrect || detail?.correct
+        ? "correct"
+        : fallback?.result || "wrong";
+    const correct = result === "correct";
+    const feedbackToStudent = detail?.feedbackToStudent || detail?.feedback || "";
+    const wrongReason = detail?.wrongReason || detail?.reason || "";
+    const cause = wrongReason || feedbackToStudent || fallback?.cause || (correct ? "思路正确，答案匹配。" : inferErrorCause(userAnswer, question));
+    const steps = Array.isArray(detail?.stepByStepExplanation)
+      ? detail.stepByStepExplanation.map((step) => String(step || "")).filter(Boolean)
+      : Array.isArray(fallback?.stepByStepExplanation)
+        ? fallback.stepByStepExplanation
+        : [];
+
+    return {
+      correct,
+      result,
+      score: Number.isFinite(Number(detail?.score)) ? Number(detail.score) : correct ? 100 : Number(fallback?.score || 0),
+      userAnswer,
+      cause,
+      feedbackToStudent,
+      standardAnswer: detail?.standardAnswer || question.answer,
+      isMathEquivalent: Boolean(detail?.isMathEquivalent ?? fallback?.isMathEquivalent),
+      missingPoints: Array.isArray(detail?.missingPoints) ? detail.missingPoints.map(String) : fallback?.missingPoints || [],
+      wrongReason,
+      stepByStepExplanation: steps,
+      nextHint: detail?.nextHint || fallback?.nextHint || "",
+      aiAvailable: Boolean(detail?.aiAvailable ?? fallback?.aiAvailable),
+      fallbackMessage: detail?.fallbackMessage || fallback?.fallbackMessage || "",
+      reinforcementQuestions: correct ? [] : generateReinforcementQuestions(question)
+    };
+  }
+
   function gradeCurrentQuestion(userAnswer) {
     const question = currentQuestion;
+    const detailed = window.AnswerJudgement?.gradeAnswerDetailed?.(userAnswer, question.answer, question);
+
+    if (detailed?.result && detailed.result !== "unknown") {
+      return normalizeTrainerGrade(detailed, userAnswer, question);
+    }
+
     const userText = normalizedText(userAnswer);
     const answerText = normalizedText(question.answer);
     const aliases = (question.aliases || []).map(normalizedText);
@@ -1901,10 +1952,67 @@
     cause = correct ? cause || "思路正确，答案匹配。" : inferErrorCause(userAnswer, question);
     return {
       correct,
+      result: correct ? "correct" : detailed?.result === "unknown" ? "partial" : "wrong",
+      score: correct ? 100 : detailed?.score || 0,
       userAnswer,
       cause,
+      feedbackToStudent: detailed?.feedbackToStudent || "",
+      missingPoints: detailed?.missingPoints || [],
+      wrongReason: detailed?.wrongReason || "",
+      stepByStepExplanation: detailed?.stepByStepExplanation || [],
+      nextHint: detailed?.nextHint || "",
+      standardAnswer: question.answer,
+      isMathEquivalent: Boolean(mathMatch?.equivalent),
       reinforcementQuestions: correct ? [] : generateReinforcementQuestions(question)
     };
+  }
+
+  async function gradeCurrentQuestionSmart(userAnswer) {
+    const question = currentQuestion;
+    const localResult = gradeCurrentQuestion(userAnswer);
+
+    if (localResult.result === "correct") {
+      return localResult;
+    }
+
+    try {
+      const response = await fetch("/api/ai/grade-answer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: question.question,
+          standardAnswer: question.answer,
+          answerValue: question.answerValue,
+          aliases: question.aliases || question.acceptedTexts || [],
+          userAnswer,
+          gradeLevel: question.grade,
+          topic: question.knowledge_point || question.knowledge,
+          answerType: question.answerType,
+          type: question.type,
+          difficulty: question.difficulty,
+          steps: question.steps || [],
+          localResult
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("grade api unavailable");
+      }
+
+      const aiGrade = await response.json();
+      return normalizeTrainerGrade(aiGrade, userAnswer, question, localResult);
+    } catch (error) {
+      return normalizeTrainerGrade(
+        {
+          ...localResult,
+          fallbackMessage: "AI讲解暂时不可用，已使用基础判题。",
+          feedbackToStudent: localResult.feedbackToStudent || "AI讲解暂时不可用，已使用基础判题。"
+        },
+        userAnswer,
+        question,
+        localResult
+      );
+    }
   }
 
   function inferErrorCause(userAnswer, question) {
@@ -1916,7 +2024,7 @@
 
     const numbers = extractNumbers(userAnswer);
     if (typeof question.answerValue === "number" && numbers.length === 0) {
-      return "答案里没有可判断的数字，可能漏写了计算结果。";
+      return "这类答案需要结合题意判断完整性，建议补写最终数值、化简结果或关键理由。";
     }
     if (typeof question.answerValue === "number" && numbers.length > 0) {
       return "数字结果不匹配，常见原因是公式代入、符号或单位处理错误。";
@@ -2393,7 +2501,10 @@
   function renderGradeResult(result) {
     const question = currentQuestion;
     const lesson = buildAnimationLesson(question, result);
-    const steps = (question.steps || []).map((step) => `
+    const explanationSteps = (result.stepByStepExplanation && result.stepByStepExplanation.length > 0)
+      ? result.stepByStepExplanation
+      : question.steps || [];
+    const steps = explanationSteps.map((step) => `
       <li>
         <strong>${escapeHTML(step.title || "步骤")}</strong>
         <span>${escapeHTML(step.content || step)}</span>
@@ -2408,25 +2519,39 @@
       </li>
     `).join("");
     const firstVariant = result.reinforcementQuestions?.[0];
+    const resultLabel = result.result === "partial"
+      ? "部分正确"
+      : result.correct
+        ? "完全正确"
+        : "错误";
+    const resultClass = result.result === "partial" ? "partial" : result.correct ? "correct" : "wrong";
+    const missingPoints = (result.missingPoints || []).map((item) => `<li>${escapeHTML(item)}</li>`).join("");
+    const feedbackText = result.feedback || result.feedbackToStudent || result.fallbackMessage || "";
 
     return `
-      <div class="grade-result ${result.correct ? "correct" : "wrong"}">
-        <h4>${result.correct ? "判断结果：正确" : "判断结果：错误"}</h4>
-        <p class="feedback-banner">${escapeHTML(result.feedback || "")}</p>
+      <div class="grade-result ${resultClass}">
+        <h4>判断结果：${resultLabel}${Number.isFinite(Number(result.score)) ? ` · ${Math.round(Number(result.score))}分` : ""}</h4>
+        <p class="feedback-banner">${escapeHTML(feedbackText)}</p>
         <div class="result-grid">
           <div>
             <span>正确答案</span>
-            <strong>${escapeHTML(question.answer)}</strong>
+            <strong>${escapeHTML(result.standardAnswer || question.answer)}</strong>
           </div>
           <div>
-            <span>${result.correct ? "学习反馈" : "错因分析"}</span>
+            <span>${result.correct ? "学习反馈" : result.result === "partial" ? "还差一步" : "错因分析"}</span>
             <strong>${escapeHTML(result.cause)}</strong>
           </div>
         </div>
-        ${!result.correct ? `
+        ${missingPoints ? `
+          <div class="step-card">
+            <h5>需要补充</h5>
+            <ul>${missingPoints}</ul>
+          </div>
+        ` : ""}
+        ${!result.correct && result.result !== "partial" ? `
           <div class="step-card">
             <h5>为什么错</h5>
-            <p>${escapeHTML(result.cause)} 这类题最容易在“条件判断”和“计算步骤”之间断开，所以要先确认题目问的是什么。</p>
+            <p>${escapeHTML(result.wrongReason || result.cause)} 这类题最容易在“条件判断”和“计算步骤”之间断开，所以要先确认题目问的是什么。</p>
           </div>
         ` : ""}
         ${lesson ? renderAnimatedLecture(lesson) : `
@@ -2435,6 +2560,7 @@
             <ol>${steps}</ol>
           </div>
         `}
+        ${result.nextHint ? `<p class="mistake-tip"><strong>下一步提示：</strong>${escapeHTML(result.nextHint)}</p>` : ""}
         <p class="mistake-tip"><strong>易错点：</strong>${escapeHTML(question.commonMistake)}</p>
         ${!result.correct && firstVariant ? `
           <div class="variant-card">

@@ -16,10 +16,22 @@ const LEGACY_PROBLEM_JSON_KEYS = ["question", "answer", "steps", "explanation"];
 
 function getAiSettings() {
   const provider = String(process.env.AI_PROVIDER || (process.env.DEEPSEEK_API_KEY ? "deepseek" : "openai")).toLowerCase();
-  const apiKey = process.env.AI_API_KEY || process.env.DEEPSEEK_API_KEY || "";
-  const model = process.env.AI_MODEL || (provider === "deepseek" ? "deepseek-chat" : "gpt-4.1-mini");
-  const baseURL = process.env.AI_BASE_URL || (provider === "deepseek" ? "https://api.deepseek.com" : "");
+  const apiKey = process.env.AI_API_KEY || process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY || "";
+  const model = process.env.AI_MODEL || (provider === "deepseek" ? process.env.DEEPSEEK_MODEL || "deepseek-v4-flash" : "gpt-4.1-mini");
+  const baseURL = process.env.AI_BASE_URL || (provider === "deepseek" ? process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com" : "");
   return { provider, apiKey, model, baseURL };
+}
+
+function isDeepSeekGradingEnabled() {
+  return String(process.env.ENABLE_DEEPSEEK_GRADING || "").toLowerCase() === "true";
+}
+
+function getDeepSeekGradingSettings() {
+  return {
+    apiKey: process.env.DEEPSEEK_API_KEY || "",
+    baseURL: process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash"
+  };
 }
 
 function createAiClient() {
@@ -37,6 +49,18 @@ function createAiClient() {
   }
 
   return new OpenAI(options);
+}
+
+function createDeepSeekGradingClient() {
+  const settings = getDeepSeekGradingSettings();
+  if (!settings.apiKey) {
+    return null;
+  }
+
+  return new OpenAI({
+    apiKey: settings.apiKey,
+    baseURL: settings.baseURL
+  });
 }
 
 function round(value, digits = 2) {
@@ -373,7 +397,11 @@ function normalizeStructuredProblemText(aiText) {
 function normalizeGeneratedQuestion(value, fallback = null) {
   const parsed = typeof value === "string" ? JSON.parse(String(value || "").trim()) : value;
   const question = typeof parsed?.question === "string" ? parsed.question.trim() : "";
-  const answer = typeof parsed?.answer === "string" ? parsed.answer.trim() : "";
+  const answer = typeof parsed?.answer === "string" && parsed.answer.trim()
+    ? parsed.answer.trim()
+    : typeof parsed?.standardAnswer === "string"
+      ? parsed.standardAnswer.trim()
+      : "";
   const analysis = typeof parsed?.analysis === "string" && parsed.analysis.trim()
     ? parsed.analysis.trim()
     : typeof parsed?.explanation === "string"
@@ -381,6 +409,8 @@ function normalizeGeneratedQuestion(value, fallback = null) {
       : "";
   const knowledgePoint = typeof parsed?.knowledge_point === "string" && parsed.knowledge_point.trim()
     ? parsed.knowledge_point.trim()
+    : Array.isArray(parsed?.knowledgePoints) && parsed.knowledgePoints[0]
+      ? String(parsed.knowledgePoints[0]).trim()
     : typeof fallback?.knowledge_point === "string"
       ? fallback.knowledge_point
       : "";
@@ -391,6 +421,8 @@ function normalizeGeneratedQuestion(value, fallback = null) {
     : [];
   const steps = Array.isArray(parsed?.steps)
     ? parsed.steps.map((item) => String(item || "").trim()).filter(Boolean)
+    : Array.isArray(parsed?.solutionSteps)
+      ? parsed.solutionSteps.map((item) => String(item || "").trim()).filter(Boolean)
     : Array.isArray(fallback?.steps)
       ? fallback.steps
       : [];
@@ -410,9 +442,21 @@ function normalizeGeneratedQuestion(value, fallback = null) {
     knowledge_point: knowledgePoint,
     difficulty: Number.isFinite(difficulty) ? Math.min(5, Math.max(1, Math.round(difficulty))) : 1,
     type: typeof parsed?.type === "string" && parsed.type.trim() ? parsed.type.trim() : "ai-generated",
+    answerType: typeof parsed?.answerType === "string" && parsed.answerType.trim() ? parsed.answerType.trim() : undefined,
+    standardAnswer: answer,
+    knowledgePoints: Array.isArray(parsed?.knowledgePoints)
+      ? parsed.knowledgePoints.map((item) => String(item || "").trim()).filter(Boolean)
+      : knowledgePoint
+        ? [knowledgePoint]
+        : [],
+    commonMistakes: Array.isArray(parsed?.commonMistakes)
+      ? parsed.commonMistakes.map((item) => String(item || "").trim()).filter(Boolean)
+      : [],
     variantStyle: typeof parsed?.variantStyle === "string" && parsed.variantStyle.trim() ? parsed.variantStyle.trim() : undefined,
     errorTags: Array.isArray(parsed?.errorTags)
       ? parsed.errorTags.map((item) => String(item || "").trim()).filter(Boolean)
+      : Array.isArray(parsed?.commonMistakes)
+        ? parsed.commonMistakes.map((item) => String(item || "").trim()).filter(Boolean)
       : []
   });
 }
@@ -441,6 +485,185 @@ function normalizeGradeResult(value) {
     reason: typeof parsed?.reason === "string" ? parsed.reason.trim() : "",
     feedback: typeof parsed?.feedback === "string" ? parsed.feedback.trim() : ""
   };
+}
+
+function normalizeMathText(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/[０-９]/g, (char) => String.fromCharCode(char.charCodeAt(0) - 0xfee0))
+    .replace(/．/g, ".")
+    .replace(/％/g, "%")
+    .replace(/／/g, "/")
+    .replace(/＋/g, "+")
+    .replace(/－|−/g, "-")
+    .replace(/\s+/g, "");
+}
+
+function parseMathValue(value) {
+  const text = normalizeMathText(value);
+  if (!text) return null;
+  const radicalFraction = text.match(/(?:√|sqrt)(\d+(?:\.\d+)?)\/([+-]?(?:\d+(?:\.\d+)?|\.\d+))/);
+  if (radicalFraction) {
+    const radicand = Number(radicalFraction[1]);
+    const denominator = Number(radicalFraction[2]);
+    if (Number.isFinite(radicand) && Number.isFinite(denominator) && radicand >= 0 && Math.abs(denominator) > 1e-9) {
+      return Math.sqrt(radicand) / denominator;
+    }
+  }
+  const numberOverRadical = text.match(/([+-]?(?:\d+(?:\.\d+)?|\.\d+))\/(?:√|sqrt)(\d+(?:\.\d+)?)/);
+  if (numberOverRadical) {
+    const numerator = Number(numberOverRadical[1]);
+    const radicand = Number(numberOverRadical[2]);
+    if (Number.isFinite(numerator) && Number.isFinite(radicand) && radicand > 0) {
+      return numerator / Math.sqrt(radicand);
+    }
+  }
+  const radical = text.match(/^(?:√|sqrt)(\d+(?:\.\d+)?)$/);
+  if (radical) {
+    const radicand = Number(radical[1]);
+    if (Number.isFinite(radicand) && radicand >= 0) return Math.sqrt(radicand);
+  }
+  const fraction = text.match(/([+-]?(?:\d+(?:\.\d+)?|\.\d+))\/([+-]?(?:\d+(?:\.\d+)?|\.\d+))/);
+  if (fraction) {
+    const numerator = Number(fraction[1]);
+    const denominator = Number(fraction[2]);
+    if (Number.isFinite(numerator) && Number.isFinite(denominator) && Math.abs(denominator) > 1e-9) {
+      return numerator / denominator;
+    }
+  }
+  const percent = text.match(/([+-]?(?:\d+(?:\.\d+)?|\.\d+))%/);
+  if (percent) {
+    const number = Number(percent[1]);
+    if (Number.isFinite(number)) return number / 100;
+  }
+  const decimal = text.match(/[+-]?(?:\d+(?:\.\d+)?|\.\d+)/);
+  if (decimal) {
+    const number = Number(decimal[0]);
+    if (Number.isFinite(number)) return number;
+  }
+  return null;
+}
+
+function containsPositiveJudgement(value) {
+  const text = normalizeMathText(value);
+  return /正确|对|是|成立|没错/.test(text) && !/不正确|不对|不是|错误/.test(text);
+}
+
+function containsNegativeJudgement(value) {
+  return /错误|不正确|不对|不是|不成立/.test(normalizeMathText(value));
+}
+
+function requiresSimplification(question, standardAnswer) {
+  return /化简|最简|有理化|写出最终答案/.test(`${question || ""}${standardAnswer || ""}`);
+}
+
+function hasSimplifiedTarget(userAnswer) {
+  const text = normalizeMathText(userAnswer);
+  return /√2\/2|sqrt2\/2|根号2\/2|√2÷2|根号2÷2|√3\/2|sqrt3\/2|根号3\/2|√3÷2|根号3÷2/.test(text);
+}
+
+function normalizeSmartGrade(value, fallback = {}) {
+  const parsed = typeof value === "string" ? JSON.parse(String(value || "").trim()) : value || {};
+  const result = ["correct", "partial", "wrong"].includes(parsed.result) ? parsed.result : fallback.result || "wrong";
+  const score = Number.isFinite(Number(parsed.score)) ? Math.max(0, Math.min(100, Number(parsed.score))) : Number(fallback.score || 0);
+  const isCorrect = result === "correct";
+  return {
+    result,
+    correct: isCorrect,
+    isCorrect,
+    score,
+    standardAnswer: String(parsed.standardAnswer || fallback.standardAnswer || ""),
+    isMathEquivalent: Boolean(parsed.isMathEquivalent ?? fallback.isMathEquivalent),
+    missingPoints: Array.isArray(parsed.missingPoints) ? parsed.missingPoints.map(String) : fallback.missingPoints || [],
+    wrongReason: String(parsed.wrongReason || fallback.wrongReason || ""),
+    feedbackToStudent: String(parsed.feedbackToStudent || fallback.feedbackToStudent || ""),
+    stepByStepExplanation: Array.isArray(parsed.stepByStepExplanation)
+      ? parsed.stepByStepExplanation.map(String)
+      : fallback.stepByStepExplanation || [],
+    nextHint: String(parsed.nextHint || fallback.nextHint || ""),
+    aiAvailable: Boolean(parsed.aiAvailable ?? fallback.aiAvailable)
+  };
+}
+
+function localSmartGrade(body) {
+  const question = String(body.question || "");
+  const standardAnswer = String(body.standardAnswer || body.answer || "");
+  const userAnswer = String(body.userAnswer || "");
+  const answerValue = Number(body.answerValue);
+  const userValue = parseMathValue(userAnswer);
+  const standardValue = Number.isFinite(answerValue) ? answerValue : parseMathValue(standardAnswer);
+  const positive = containsPositiveJudgement(userAnswer);
+  const negative = containsNegativeJudgement(userAnswer);
+  const standardPositive = /正确|成立|是/.test(standardAnswer);
+  const needsSimplify = requiresSimplification(question, standardAnswer);
+  const base = {
+    standardAnswer,
+    stepByStepExplanation: Array.isArray(body.steps) ? body.steps.map(String) : [],
+    missingPoints: [],
+    wrongReason: "",
+    feedbackToStudent: "",
+    nextHint: "",
+    aiAvailable: false
+  };
+
+  if (needsSimplify && standardPositive && positive && !hasSimplifiedTarget(userAnswer)) {
+    return normalizeSmartGrade({
+      ...base,
+      result: "partial",
+      score: 60,
+      isMathEquivalent: false,
+      missingPoints: ["没有化简 1/√2", "没有写出最终答案 √2/2"],
+      feedbackToStudent: "你判断对了，sin45° = 1/√2 是正确的。但题目还要求你化简，所以还需要写出 1/√2 = √2/2。",
+      stepByStepExplanation: ["sin45° = 对边 / 斜边", "sin45° = 1 / √2", "分母有理化：1/√2 = √2/2"],
+      nextHint: "把 1/√2 化简为 √2/2。"
+    });
+  }
+
+  if (standardPositive && negative) {
+    return normalizeSmartGrade({
+      ...base,
+      result: "wrong",
+      score: 0,
+      isMathEquivalent: false,
+      wrongReason: "sin45° = 对边/斜边 = 1/√2，这个等式本身是正确的。",
+      feedbackToStudent: "这个判断不对。sin45° = 对边/斜边 = 1/√2，这个等式本身是正确的。",
+      stepByStepExplanation: ["画出等腰直角三角形", "对边是 1，斜边是 √2", "sin45° = 1/√2 = √2/2"],
+      nextHint: "先判断等式正确，再完成化简。"
+    });
+  }
+
+  if (userValue !== null && standardValue !== null && Math.abs(userValue - standardValue) <= 1e-9) {
+    return normalizeSmartGrade({
+      ...base,
+      result: "correct",
+      score: 100,
+      isMathEquivalent: true,
+      feedbackToStudent: `完全正确，${normalizeMathText(userAnswer)} 与标准答案数学等价。`,
+      nextHint: "继续保持。"
+    });
+  }
+
+  if ((positive || negative) && !standardPositive) {
+    return normalizeSmartGrade({
+      ...base,
+      result: "partial",
+      score: 40,
+      isMathEquivalent: false,
+      missingPoints: ["没有写出数学结果或关键理由"],
+      feedbackToStudent: "你的回答还不完整，需要补充计算、化简或理由。",
+      nextHint: "把最终答案或理由写完整。"
+    });
+  }
+
+  return normalizeSmartGrade({
+    ...base,
+    result: userValue === null ? "partial" : "wrong",
+    score: userValue === null ? 30 : 0,
+    isMathEquivalent: false,
+    wrongReason: userValue === null ? "本地规则无法确认文字答案是否完整。" : "学生答案和标准答案数学意义不一致。",
+    feedbackToStudent: userValue === null ? "AI讲解暂时不可用时，请补充更完整的计算或理由。" : "你的答案和标准答案不等价，请检查计算或化简。",
+    nextHint: "对照标准答案重新检查。"
+  });
 }
 
 async function callAiJson(systemPrompt, payload, options = {}) {
@@ -542,8 +765,10 @@ async function handleGenerateQuestion(req, res) {
     const prompt = [
       "你是 AI数学陪练小程序的出题引擎，面向小学1-6年级和初中7-9年级学生。",
       "只能返回一个 JSON 对象，不允许 Markdown、代码块或多余解释。",
-      "JSON 必须包含 question、answer、analysis、knowledge_point、difficulty、type。",
-      "可额外包含 answerValue、aliases、steps、variantStyle、errorTags，aliases、steps、errorTags 必须是字符串数组。",
+      "JSON 必须包含 question、standardAnswer、answerType、difficulty、knowledgePoints、solutionSteps、commonMistakes。",
+      "answerType 只能是 number、expression、text、judgment 之一；knowledgePoints、solutionSteps、commonMistakes 必须是字符串数组。",
+      "为了兼容旧前端，也可以同时返回 answer、analysis、knowledge_point、type、aliases、answerValue、variantStyle、errorTags。",
+      "如果返回 answer，必须与 standardAnswer 完全一致；如果返回 analysis，必须概括 solutionSteps。",
       "输入会提供年级、知识点、难度1-5、题型和本地种子题，请按这些信息生成题目。",
       "题目要明显提升学习效果：优先真实生活场景、不同表达方式、轻量思维判断，不要只是机械换数字。",
       "变式不能只换数字，必须从同语义变式、反向提问、生活化应用题、易错辨析、多步骤推理中选择一种。",
@@ -579,6 +804,84 @@ async function handleGenerateQuestion(req, res) {
     res.status(200).json(fallback);
   } catch (error) {
     res.status(200).json(fallback);
+  }
+}
+
+async function handleAiGradeAnswer(req, res) {
+  const body = req.body || {};
+  const localResult = localSmartGrade(body);
+  const gradingEnabled = isDeepSeekGradingEnabled();
+  const client = gradingEnabled ? createDeepSeekGradingClient() : null;
+
+  if (!gradingEnabled || !client) {
+    const fallbackMessage = gradingEnabled
+      ? "AI讲解暂时不可用，已使用基础判题。"
+      : "已使用基础判题。";
+    res.status(200).json({
+      ...localResult,
+      aiAvailable: false,
+      fallbackMessage,
+      feedbackToStudent: localResult.feedbackToStudent || fallbackMessage
+    });
+    return;
+  }
+
+  try {
+    const settings = getDeepSeekGradingSettings();
+    const completion = await client.chat.completions.create({
+      model: settings.model,
+      messages: [
+        {
+          role: "system",
+          content: [
+            "你是一个严谨、耐心的初中数学老师，正在批改学生答案。",
+            "你必须根据题目、标准答案、学生答案、本地数学判定结果综合判断。",
+            "不要只做二元判断；学生判断对但步骤、化简或最终表达不完整时，要判 partial。",
+            "必须识别数学等价：0.5=1/2，2/4=1/2，50%=0.5，1/√2=√2/2，0.707106≈√2/2。",
+            "必须识别特殊三角函数值：sin30°=1/2，sin45°=√2/2，sin60°=√3/2。",
+            "如果学生只写“正确”，而题目还要求化简、说明理由或写最终答案，应判 partial，并指出缺少什么。",
+            "如果学生答案语义正确但表达不完整，不要说“答案里没有可判断的数字”，应指出缺少的步骤或结论。",
+            "只允许返回严格 JSON，不要输出 Markdown、代码块或任何多余文字。",
+            "JSON 字段必须为：result、score、standardAnswer、isMathEquivalent、missingPoints、wrongReason、feedbackToStudent、stepByStepExplanation、nextHint。",
+            "result 只能是 correct、partial、wrong；score 是 0 到 100 的数字；missingPoints 和 stepByStepExplanation 必须是字符串数组。"
+          ].join("\n")
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            question: body.question,
+            standardAnswer: body.standardAnswer || body.answer,
+            userAnswer: body.userAnswer,
+            gradeLevel: body.gradeLevel || body.grade,
+            topic: body.topic || body.modelId || body.knowledge_point,
+            answerType: body.answerType,
+            aliases: Array.isArray(body.aliases) ? body.aliases : [],
+            answerValue: body.answerValue,
+            localResult
+          })
+        }
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 850
+    });
+
+    const content = completion.choices?.[0]?.message?.content || "{}";
+    const aiResult = normalizeSmartGrade(JSON.parse(content), localResult);
+    res.status(200).json({
+      ...aiResult,
+      aiAvailable: true
+    });
+  } catch (error) {
+    const fallbackMessage = "AI讲解暂时不可用，已使用基础判题。";
+    res.status(200).json({
+      ...localResult,
+      aiAvailable: false,
+      fallbackMessage,
+      feedbackToStudent: localResult.feedbackToStudent
+        ? `${localResult.feedbackToStudent} ${fallbackMessage}`
+        : fallbackMessage
+    });
   }
 }
 
@@ -661,6 +964,7 @@ app.get("/_debug", (req, res) => {
 
 app.post("/api/ask", handleAsk);
 app.post("/api/generate-question", handleGenerateQuestion);
+app.post("/api/ai/grade-answer", handleAiGradeAnswer);
 app.post("/api/grade-answer", handleGradeAnswer);
 
 app.all("/api/ask", (req, res) => {
@@ -669,6 +973,10 @@ app.all("/api/ask", (req, res) => {
 
 app.all("/api/generate-question", (req, res) => {
   res.status(405).json({ error: "只支持 POST /api/generate-question" });
+});
+
+app.all("/api/ai/grade-answer", (req, res) => {
+  res.status(405).json({ error: "只支持 POST /api/ai/grade-answer" });
 });
 
 app.all("/api/grade-answer", (req, res) => {

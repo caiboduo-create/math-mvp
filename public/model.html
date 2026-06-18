@@ -37,6 +37,15 @@
         <div id="metricPanel" class="metric-panel"></div>
       </section>
 
+      <section class="card geogebra-card" id="geogebra-section">
+        <div class="card-heading">
+          <h2>互动探索</h2>
+          <p id="geogebra-description">拖动点、滑块或参数，观察图形和公式变化。</p>
+        </div>
+        <div id="geogebra-container" class="geogebra-container"></div>
+        <div id="geogebra-fallback" class="content-box muted-box" hidden></div>
+      </section>
+
       <section class="card stats-card">
         <div class="card-heading">
           <h2>答题统计</h2>
@@ -98,6 +107,7 @@
     </main>
 
     <script src="models.js"></script>
+    <script src="https://www.geogebra.org/apps/deployggb.js"></script>
     <script src="js/model-page.js"></script>
   </body>
 </html>

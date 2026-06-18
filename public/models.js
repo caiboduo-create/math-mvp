@@ -62,6 +62,15 @@
       description: "学习对顶角、邻补角、垂线、平行线判定和平行线性质。",
       tags: ["对顶角", "垂线", "平行线", "同位角", "内错角"],
       difficulty: "基础",
+      geoGebra: {
+        enabled: true,
+        embedType: "applet",
+        appName: "geometry",
+        materialId: "",
+        height: 420,
+        construction: "parallel-lines",
+        description: "拖动截线上的点，观察同位角、内错角和同旁内角的变化。"
+      },
       formula: ["对顶角相等。", "两直线平行，同位角相等，内错角相等，同旁内角互补。"],
       examples: ["已知两直线平行，同位角为 65°，求另一个同位角。", "邻补角一个为 110°，求另一个角。"]
     },
@@ -86,6 +95,15 @@
       description: "学习坐标轴、象限、点的坐标以及坐标表示位置。",
       tags: ["坐标", "象限", "点的位置"],
       difficulty: "基础",
+      geoGebra: {
+        enabled: true,
+        embedType: "applet",
+        appName: "graphing",
+        materialId: "",
+        height: 420,
+        construction: "coordinate-system",
+        description: "拖动坐标系中的点，实时观察横坐标和纵坐标。"
+      },
       formula: ["点 P(x, y) 中，x 表示横坐标，y 表示纵坐标。", "第一象限：x > 0，y > 0。"],
       examples: ["判断点 (3, -2) 在第几象限。", "写出点 A 的横坐标和纵坐标。"]
     },
@@ -134,6 +152,15 @@
       description: "学习三角形的边、角、高、中线、角平分线、面积和内角和。",
       tags: ["边", "高", "面积", "内角和"],
       difficulty: "基础",
+      geoGebra: {
+        enabled: true,
+        embedType: "applet",
+        appName: "geometry",
+        materialId: "",
+        height: 420,
+        construction: "triangle",
+        description: "拖动三角形顶点，观察底、高、面积和形状变化。"
+      },
       formula: ["三角形面积：S = 底 × 高 ÷ 2。", "三角形内角和等于 180°。"],
       examples: ["一个三角形底为 12 厘米，高为 5 厘米，求面积。"],
       visual: "triangle",
@@ -253,6 +280,15 @@
       description: "学习直角三角形三边关系，以及勾股定理的逆定理。",
       tags: ["直角三角形", "勾股定理", "斜边"],
       difficulty: "进阶",
+      geoGebra: {
+        enabled: true,
+        embedType: "applet",
+        appName: "geometry",
+        materialId: "",
+        height: 420,
+        construction: "pythagorean-theorem",
+        description: "拖动直角三角形的边长，观察 a² + b² = c² 的关系。"
+      },
       formula: ["直角三角形两直角边为 a、b，斜边为 c，则 a² + b² = c²。"],
       examples: ["直角三角形两条直角边分别是 6 和 8，求斜边。"]
     },
@@ -313,6 +349,15 @@
       description: "学习一次函数 y=kx+b 的图象、性质和实际应用。",
       tags: ["k", "b", "斜率", "截距", "图象"],
       difficulty: "进阶",
+      geoGebra: {
+        enabled: true,
+        embedType: "applet",
+        appName: "graphing",
+        materialId: "",
+        height: 420,
+        construction: "linear-function",
+        description: "拖动 k、b 滑块，观察一次函数图像的斜率和截距变化。"
+      },
       formula: ["一次函数：y = kx + b，其中 k ≠ 0。", "k 决定图象倾斜方向和变化快慢，b 是 y 轴截距。"],
       examples: ["已知一次函数 y = 2x + 3，求 x=5 时 y 的值。"]
     },
@@ -349,6 +394,15 @@
       description: "学习二次函数 y=ax²+bx+c 的图象、顶点、开口方向和最值。",
       tags: ["抛物线", "顶点", "对称轴", "开口", "最值"],
       difficulty: "进阶",
+      geoGebra: {
+        enabled: true,
+        embedType: "applet",
+        appName: "graphing",
+        materialId: "",
+        height: 440,
+        construction: "quadratic-function",
+        description: "拖动 a、b、c 滑块，观察抛物线开口、顶点和对称轴变化。"
+      },
       formula: ["二次函数：y = ax² + bx + c，其中 a ≠ 0。", "对称轴：x = -b / 2a。", "顶点坐标：(-b / 2a, (4ac-b²) / 4a)。"],
       examples: ["已知 y = x² - 4x + 3，求对称轴。"],
       visual: "parabola",
@@ -384,6 +438,15 @@
       description: "学习圆的半径、直径、周长、面积、弦、弧和圆心角。",
       tags: ["半径", "直径", "面积", "周长"],
       difficulty: "基础",
+      geoGebra: {
+        enabled: true,
+        embedType: "applet",
+        appName: "geometry",
+        materialId: "",
+        height: 420,
+        construction: "circle",
+        description: "拖动半径滑块，观察圆的半径、周长和面积变化。"
+      },
       formula: ["圆面积：S = πr²。", "圆周长：C = 2πr。", "直径：d = 2r。"],
       examples: ["半径为 5 厘米，求圆的面积或周长。"],
       visual: "circle",
@@ -405,6 +468,15 @@
       description: "学习扇形面积、弧长、圆心角和半径之间的关系。",
       tags: ["半径", "圆心角", "弧长", "面积"],
       difficulty: "进阶",
+      geoGebra: {
+        enabled: true,
+        embedType: "applet",
+        appName: "geometry",
+        materialId: "",
+        height: 420,
+        construction: "sector",
+        description: "拖动半径和圆心角滑块，观察扇形弧长与面积变化。"
+      },
       formula: ["扇形面积：S = θ/360° × πr²。", "弧长：L = θ/360° × 2πr。"],
       examples: ["半径为 6 厘米，圆心角为 60°，求扇形面积。"],
       visual: "sector",
@@ -1043,6 +1115,12 @@
       }
     }
   }
+
+  models.forEach((model) => {
+    if (!model.geoGebra) {
+      model.geoGebra = { enabled: false };
+    }
+  });
 
   window.MathCoursewareModels = {
     models,

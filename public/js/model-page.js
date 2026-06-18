@@ -13,6 +13,10 @@
   const metaLine = document.getElementById("modelMetaLine");
   const description = document.getElementById("modelDescription");
   const overviewPanel = document.getElementById("overviewPanel");
+  const geogebraSection = document.getElementById("geogebra-section");
+  const geogebraDescription = document.getElementById("geogebra-description");
+  const geogebraContainer = document.getElementById("geogebra-container");
+  const geogebraFallback = document.getElementById("geogebra-fallback");
   const sliders = document.getElementById("sliderPanel");
   const metrics = document.getElementById("metricPanel");
   const askForm = document.getElementById("askForm");
@@ -42,6 +46,7 @@
     metrics.innerHTML = "";
     askForm.hidden = true;
     gradeForm.hidden = true;
+    geogebraSection.hidden = true;
     resultCard.hidden = false;
     gradeResult.hidden = false;
     gradeResult.className = "grade-result-card is-wrong";
@@ -290,6 +295,206 @@
 
       sliders.appendChild(control);
     });
+  }
+
+  function runGeoGebraCommands(api, commands) {
+    commands.forEach((command) => {
+      try {
+        api.evalCommand(command);
+      } catch (error) {
+        console.warn("GeoGebra command failed:", command, error);
+      }
+    });
+  }
+
+  const geoGebraConstructions = {
+    circle(api) {
+      runGeoGebraCommands(api, [
+        "r = Slider[1, 8, 0.1, 1, 150, false, true, false, false]",
+        "SetCoords[r, -4.8, 4.2]",
+        "O = (0, 0)",
+        "A = (r, 0)",
+        "c = Circle[O, A]",
+        "Segment[O, A]",
+        "area = pi * r^2",
+        "circumference = 2 * pi * r",
+        "Text[\"拖动滑块 r，观察半径、面积和周长\", (-5, 4.8)]",
+        "Text[\"面积 S = πr²\", (-5, -4.2)]",
+        "Text[\"周长 C = 2πr\", (-5, -4.7)]"
+      ]);
+    },
+
+    sector(api) {
+      runGeoGebraCommands(api, [
+        "r = Slider[1, 8, 0.1, 1, 150, false, true, false, false]",
+        "theta = Slider[30, 300, 1, 1, 150, false, true, false, false]",
+        "SetCoords[r, -5, 4.4]",
+        "SetCoords[theta, -5, 3.8]",
+        "O = (0, 0)",
+        "A = (r, 0)",
+        "B = (r * cos(theta°), r * sin(theta°))",
+        "s = CircularSector[O, A, B]",
+        "Segment[O, A]",
+        "Segment[O, B]",
+        "arcLength = theta / 360 * 2 * pi * r",
+        "sectorArea = theta / 360 * pi * r^2",
+        "Text[\"拖动 r 与 theta，观察扇形变化\", (-5, 4.9)]",
+        "Text[\"L = θ/360° × 2πr\", (-5, -4.2)]",
+        "Text[\"S = θ/360° × πr²\", (-5, -4.7)]"
+      ]);
+    },
+
+    triangle(api) {
+      runGeoGebraCommands(api, [
+        "A = (-3, 0)",
+        "B = (3, 0)",
+        "C = (0.8, 3)",
+        "t = Polygon[A, B, C]",
+        "base = Distance[A, B]",
+        "h = Distance[C, Line[A, B]]",
+        "area = Area[t]",
+        "Segment[A, B]",
+        "Text[\"拖动点 C，观察底、高和面积\", (-5, 4.5)]",
+        "Text[\"S = 底 × 高 ÷ 2\", (-5, -4.3)]"
+      ]);
+    },
+
+    "linear-function"(api) {
+      runGeoGebraCommands(api, [
+        "k = Slider[-5, 5, 0.1, 1, 150, false, true, false, false]",
+        "b = Slider[-5, 5, 0.1, 1, 150, false, true, false, false]",
+        "SetCoords[k, -5, 4.5]",
+        "SetCoords[b, -5, 3.9]",
+        "f(x) = k * x + b",
+        "Text[\"拖动 k、b，观察 y=kx+b\", (-5, 4.9)]",
+        "Text[\"k 控制斜率，b 控制截距\", (-5, -4.6)]"
+      ]);
+    },
+
+    "quadratic-function"(api) {
+      runGeoGebraCommands(api, [
+        "a = Slider[-3, 3, 0.1, 1, 150, false, true, false, false]",
+        "b = Slider[-6, 6, 0.1, 1, 150, false, true, false, false]",
+        "c = Slider[-6, 6, 0.1, 1, 150, false, true, false, false]",
+        "SetCoords[a, -5, 4.8]",
+        "SetCoords[b, -5, 4.2]",
+        "SetCoords[c, -5, 3.6]",
+        "f(x) = a * x^2 + b * x + c",
+        "V = Extremum[f]",
+        "axis: x = -b / (2a)",
+        "Text[\"拖动 a、b、c，观察抛物线\", (-5, 5.2)]",
+        "Text[\"对称轴 x = -b / 2a\", (-5, -4.8)]"
+      ]);
+    },
+
+    "coordinate-system"(api) {
+      runGeoGebraCommands(api, [
+        "A = (2, 1)",
+        "Text[\"拖动点 A，观察坐标变化\", (-5, 4.5)]",
+        "Text[\"点 A 的坐标是 (x, y)\", (-5, -4.5)]"
+      ]);
+    },
+
+    "pythagorean-theorem"(api) {
+      runGeoGebraCommands(api, [
+        "A = (0, 0)",
+        "B = Point[xAxis]",
+        "C = Point[yAxis]",
+        "SetCoords[B, 4, 0]",
+        "SetCoords[C, 0, 3]",
+        "tri = Polygon[A, B, C]",
+        "a = Distance[A, C]",
+        "b = Distance[A, B]",
+        "c = Distance[B, C]",
+        "Text[\"拖动 B 或 C，观察 a² + b² = c²\", (-5, 4.5)]",
+        "Text[\"直角三角形：a² + b² = c²\", (-5, -4.5)]"
+      ]);
+    },
+
+    "parallel-lines"(api) {
+      runGeoGebraCommands(api, [
+        "A = (-4, 1)",
+        "B = (4, 1)",
+        "C = (-4, -1)",
+        "D = (4, -1)",
+        "l = Line[A, B]",
+        "m = Line[C, D]",
+        "P = Point[l]",
+        "Q = Point[m]",
+        "t = Line[P, Q]",
+        "Text[\"拖动 P 或 Q，观察截线与平行线角关系\", (-5, 4.5)]",
+        "Text[\"两直线平行，同位角相等，内错角相等\", (-5, -4.5)]"
+      ]);
+    }
+  };
+
+  function showGeoGebraFallback(message) {
+    geogebraContainer.replaceChildren();
+    geogebraContainer.hidden = true;
+    geogebraFallback.hidden = false;
+    geogebraFallback.textContent = message;
+  }
+
+  function renderGeoGebra() {
+    const config = model.geoGebra || { enabled: false };
+    geogebraDescription.textContent = config.description || "拖动点、滑块或参数，观察图形和公式变化。";
+
+    if (!config.enabled) {
+      showGeoGebraFallback("该知识点暂未提供互动图示，后续将补充。");
+      return;
+    }
+
+    geogebraContainer.hidden = false;
+    geogebraFallback.hidden = true;
+    geogebraFallback.textContent = "";
+    geogebraContainer.replaceChildren();
+    geogebraContainer.style.minHeight = `${config.height || 420}px`;
+
+    if (config.embedType === "iframe" && config.materialId) {
+      const iframe = document.createElement("iframe");
+      iframe.title = `${model.title} GeoGebra 互动图示`;
+      iframe.loading = "lazy";
+      iframe.allowFullscreen = true;
+      iframe.height = String(config.height || 420);
+      iframe.src = `https://www.geogebra.org/material/iframe/id/${encodeURIComponent(config.materialId)}/width/900/height/${config.height || 420}/border/888/sfsb/true/smb/false/stb/false/stbh/false/ai/false/asb/false/sri/true/rc/false/ld/false/sdz/true/ctl/false`;
+      geogebraContainer.appendChild(iframe);
+      return;
+    }
+
+    if (typeof window.GGBApplet !== "function") {
+      showGeoGebraFallback("GeoGebra 暂时无法加载，请稍后刷新页面。");
+      return;
+    }
+
+    const appletId = `ggb_${model.id.replace(/[^a-z0-9]/gi, "_")}`;
+    const params = {
+      id: appletId,
+      appName: config.appName || "geometry",
+      width: geogebraContainer.clientWidth || 900,
+      height: config.height || 420,
+      showToolBar: false,
+      showAlgebraInput: false,
+      showMenuBar: false,
+      showResetIcon: true,
+      enableLabelDrags: false,
+      enableShiftDragZoom: true,
+      useBrowserForJS: true,
+      borderColor: "#cfe0f5",
+      scaleContainerClass: "geogebra-container",
+      appletOnLoad(api) {
+        const construction = geoGebraConstructions[config.construction || model.id];
+        if (construction) {
+          construction(api);
+        }
+      }
+    };
+
+    try {
+      const applet = new window.GGBApplet(params, true);
+      applet.inject("geogebra-container");
+    } catch (error) {
+      showGeoGebraFallback("GeoGebra 互动图示加载失败，请稍后重试。");
+    }
   }
 
   function statsStorageKey() {
@@ -820,6 +1025,7 @@
 
   buildSliders();
   renderAll();
+  renderGeoGebra();
   updateStatsPanel();
   updateMistakeCount();
 })();

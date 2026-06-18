@@ -259,6 +259,7 @@ h2 {
   grid-template-areas:
     "visual controls"
     "visual stats"
+    "interactive interactive"
     "practice practice"
     "result result"
     "ask ask";
@@ -283,6 +284,10 @@ h2 {
 
 .practice-card {
   grid-area: practice;
+}
+
+.geogebra-card {
+  grid-area: interactive;
 }
 
 .result-card {
@@ -316,6 +321,31 @@ h2 {
 
 .model-svg[hidden] {
   display: none;
+}
+
+.geogebra-container {
+  width: 100%;
+  min-height: 420px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.geogebra-container[hidden] {
+  display: none;
+}
+
+.geogebra-container iframe,
+.geogebra-container article,
+.geogebra-container > div {
+  max-width: 100%;
+}
+
+.geogebra-container iframe {
+  display: block;
+  width: 100%;
+  border: 0;
 }
 
 .shape-fill {
@@ -680,6 +710,7 @@ a:focus-visible {
       "visual"
       "controls"
       "stats"
+      "interactive"
       "practice"
       "result"
       "ask";

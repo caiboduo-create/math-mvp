@@ -43,6 +43,127 @@ function round(value, digits = 2) {
   return Number(value).toFixed(digits).replace(/\.?0+$/, "");
 }
 
+function extractNumbers(value) {
+  const matches = String(value ?? "").match(/-?\d+(?:\.\d+)?/g);
+  return matches ? matches.map(Number).filter((item) => Number.isFinite(item)) : [];
+}
+
+function signedContextFor(questionText) {
+  const text = String(questionText || "");
+  if (/水下|水面|海面|潜水|下潜|上浮|深度/.test(text)) {
+    return { kind: "water", unit: text.includes("厘米") ? "厘米" : "米" };
+  }
+  if (/海拔|海平面|高于海平面|低于海平面|山顶|山谷/.test(text)) {
+    return { kind: "altitude", unit: text.includes("厘米") ? "厘米" : "米" };
+  }
+  if (/温度|气温|℃|摄氏|零上|零下/.test(text)) {
+    return { kind: "temperature", unit: "℃" };
+  }
+  return null;
+}
+
+function signedSemanticText(value, context) {
+  const magnitude = round(Math.abs(Number(value)), 2);
+  if (context.kind === "temperature") {
+    if (value > 0) return `零上${magnitude}℃`;
+    if (value < 0) return `零下${magnitude}℃`;
+    return "0℃";
+  }
+  if (context.kind === "water") {
+    if (value > 0) return `水上${magnitude}${context.unit}`;
+    if (value < 0) return `水下${magnitude}${context.unit}`;
+    return "水面";
+  }
+  if (context.kind === "altitude") {
+    if (value > 0) return `海拔${magnitude}${context.unit}`;
+    if (value < 0) return `海平面以下${magnitude}${context.unit}`;
+    return "海平面";
+  }
+  return String(value);
+}
+
+function signedValueFromAnswer(answer, context) {
+  const numbers = extractNumbers(answer);
+  if (!numbers.length) {
+    return undefined;
+  }
+  const text = String(answer || "");
+  const magnitude = Math.abs(numbers[0]);
+  if (context.kind === "temperature") {
+    if (/零下|低于0/.test(text)) return -magnitude;
+    if (/零上|高于0/.test(text)) return magnitude;
+  }
+  if (context.kind === "water") {
+    if (/水下|低于水面/.test(text)) return -magnitude;
+    if (/水上|高于水面/.test(text)) return magnitude;
+  }
+  if (context.kind === "altitude") {
+    if (/海平面以下|低于海平面/.test(text)) return -magnitude;
+    if (/海拔|高于海平面|海平面以上/.test(text)) return magnitude;
+  }
+  return numbers[0];
+}
+
+function signedContextExplanation(value, context) {
+  if (context.kind === "temperature") {
+    return value < 0 ? "负号表示低于 0℃，所以要说成零下。" : value > 0 ? "正数表示高于 0℃，所以要说成零上。" : "0 表示正好在 0℃。";
+  }
+  if (context.kind === "water") {
+    return value < 0 ? "负号表示低于水面，所以生活语义是水下。" : value > 0 ? "正数表示高于水面，所以生活语义是水上。" : "0 表示正好在水面。";
+  }
+  if (context.kind === "altitude") {
+    return value < 0 ? "负号表示低于海平面，所以生活语义是海平面以下。" : value > 0 ? "正数表示高于海平面，所以生活语义是海拔。" : "0 表示正好在海平面。";
+  }
+  return "先把符号结果翻译成生活语义。";
+}
+
+function hasSignedSemanticConflict(answer, value, context) {
+  const text = String(answer || "");
+  if (!context || !text) {
+    return false;
+  }
+  if (context.kind === "water") {
+    return (value < 0 && /水上|高于水面/.test(text)) || (value > 0 && /水下|低于水面/.test(text));
+  }
+  if (context.kind === "altitude") {
+    return (value < 0 && /海拔(?!以下)|高于海平面/.test(text)) || (value > 0 && /海平面以下|低于海平面/.test(text));
+  }
+  if (context.kind === "temperature") {
+    return (value < 0 && /零上/.test(text)) || (value > 0 && /零下/.test(text));
+  }
+  return false;
+}
+
+function normalizeSignedSemanticQuestion(result) {
+  const context = signedContextFor(result?.question);
+  if (!context) {
+    return result;
+  }
+  const value = typeof result.answerValue === "number" && Number.isFinite(result.answerValue)
+    ? Number(result.answerValue)
+    : signedValueFromAnswer(result.answer, context);
+  if (!Number.isFinite(value)) {
+    return result;
+  }
+  const numericText = round(value, 2);
+  const semanticText = signedSemanticText(value, context);
+  const conflict = hasSignedSemanticConflict(result.answer, value, context);
+  const semanticExplanation = `符号语义检查：数值结果是 ${numericText}，在本题语境中表示“${semanticText}”。${signedContextExplanation(value, context)}`;
+  const steps = Array.isArray(result.steps) ? [...result.steps] : [];
+  if (!steps.some((step) => String(step || "").includes("符号语义检查"))) {
+    steps.push(semanticExplanation);
+  }
+  return {
+    ...result,
+    answer: `数值结果：${numericText}；语义结果：${semanticText}`,
+    answerValue: value,
+    aliases: Array.from(new Set([...(result.aliases || []), String(numericText), semanticText, `${numericText}${context.unit || ""}`])).filter(Boolean),
+    steps,
+    analysis: `${result.analysis || result.explanation || ""}${result.analysis || result.explanation ? " " : ""}${semanticExplanation}${conflict ? " 原答案的符号和生活语义存在冲突，已按语境自动纠正。" : ""}`,
+    explanation: `${result.explanation || result.analysis || ""}${result.explanation || result.analysis ? " " : ""}${semanticExplanation}${conflict ? " 原答案的符号和生活语义存在冲突，已按语境自动纠正。" : ""}`
+  };
+}
+
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
@@ -191,6 +312,8 @@ function systemPromptFor(payload) {
       "你是 AI数学学习产品V4 的数学出题引擎。",
       "你必须根据用户给出的数学模型和当前参数生成 1 道中学生应用题。",
       "每次都要变化题目参数、单位或问法，避免生成重复题目。",
+      "如果题目涉及正负数生活语境，尤其是水下、海拔、温度，answer 必须同时包含“数值结果”和“语义结果”，例如：数值结果：-20；语义结果：水下20米。",
+      "禁止只输出“-20米”这类没有生活语义的答案；必须检查符号结果与生活语义是否冲突，冲突时在 explanation 中补充解释。",
       "你必须只返回 JSON，禁止输出 Markdown、解释、代码块或任何多余文字。",
       "不要把 JSON 包在字符串里，不要添加 question/answer/steps/explanation 之外的字段。",
       "JSON 格式必须严格如下：",
@@ -262,6 +385,7 @@ function normalizeGeneratedQuestion(value, fallback = null) {
       ? fallback.knowledge_point
       : "";
   const difficulty = Number(parsed?.difficulty ?? fallback?.difficulty ?? 1);
+  const numericAnswerValue = Number(parsed?.answerValue);
   const aliases = Array.isArray(parsed?.aliases)
     ? parsed.aliases.map((item) => String(item || "").trim()).filter(Boolean)
     : [];
@@ -275,10 +399,10 @@ function normalizeGeneratedQuestion(value, fallback = null) {
     throw new Error("AI question json is incomplete");
   }
 
-  return {
+  return normalizeSignedSemanticQuestion({
     question,
     answer,
-    answerValue: parsed?.answerValue ?? undefined,
+    answerValue: Number.isFinite(numericAnswerValue) ? numericAnswerValue : undefined,
     aliases,
     steps: steps.length > 0 ? steps : [analysis],
     analysis,
@@ -290,7 +414,7 @@ function normalizeGeneratedQuestion(value, fallback = null) {
     errorTags: Array.isArray(parsed?.errorTags)
       ? parsed.errorTags.map((item) => String(item || "").trim()).filter(Boolean)
       : []
-  };
+  });
 }
 
 function fallbackQuestionFromBody(body) {
@@ -424,6 +548,8 @@ async function handleGenerateQuestion(req, res) {
       "题目要明显提升学习效果：优先真实生活场景、不同表达方式、轻量思维判断，不要只是机械换数字。",
       "变式不能只换数字，必须从同语义变式、反向提问、生活化应用题、易错辨析、多步骤推理中选择一种。",
       "允许加入一个温和的易错点干扰，例如单位、符号、是否除以2、总数与目标数，但不能故意出偏题或过难题。",
+      "如果题目涉及正负数生活语境，尤其是水下、海拔、温度，answer 必须同时包含“数值结果”和“语义结果”，例如：数值结果：-20；语义结果：水下20米。",
+      "禁止只输出“-20米”这类没有生活语义的答案；analysis 必须把负号或正号翻译成自然语言，并检查是否存在符号结果与生活语义冲突。",
       "题目要符合给定 modelId、年级和领域，答案必须稳定、可批改，不要生成超纲内容。",
       "analysis 要给出清晰解析，difficulty 必须是 1 到 5 的整数，type 必须是 基础题、应用题、思维题、变式题、多步骤题 之一。",
       "analysis 的语气要像耐心陪练：先解释为什么这样想，再拆步骤，最后给一句记忆总结。",
@@ -476,7 +602,9 @@ async function handleGradeAnswer(req, res) {
         "只能返回一个 JSON 对象，不允许 Markdown、代码块或多余解释。",
         "JSON 必须包含 isCorrect、reason、feedback。",
         "数字题不要随意放宽；只有用户答案与标准答案数学意义一致时才能判正确。",
-        "如果用户只是表达方式不同，但语义等价，可以判正确。"
+        "如果用户只是表达方式不同，但语义等价，可以判正确。",
+        "正负数生活题要同时关注数值和语义：-20 在水下语境可表达为水下20米，在温度语境可表达为零下20℃，在海拔语境可表达为海平面以下20米。",
+        "如果标准答案或用户答案出现符号与生活语义冲突，必须在 reason 中指出。"
       ].join("\n"),
       {
         question: body.question,

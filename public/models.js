@@ -548,8 +548,110 @@
     return `平方${unit}`;
   }
 
-  function questionResult(question, answer, options = {}) {
+  function extractNumbers(value) {
+    const matches = String(value ?? "").match(/-?\d+(?:\.\d+)?/g);
+    return matches ? matches.map(Number).filter((item) => Number.isFinite(item)) : [];
+  }
+
+  function signedContextFor(questionText) {
+    const text = String(questionText || "");
+    if (/水下|水面|海面|潜水|下潜|上浮|深度/.test(text)) {
+      return { kind: "water", unit: text.includes("厘米") ? "厘米" : "米" };
+    }
+    if (/海拔|海平面|高于海平面|低于海平面|山顶|山谷/.test(text)) {
+      return { kind: "altitude", unit: text.includes("厘米") ? "厘米" : "米" };
+    }
+    if (/温度|气温|℃|摄氏|零上|零下/.test(text)) {
+      return { kind: "temperature", unit: "℃" };
+    }
+    return null;
+  }
+
+  function signedSemanticText(value, context) {
+    const magnitude = round(Math.abs(Number(value)), 2);
+    if (context.kind === "temperature") {
+      if (value > 0) return `零上${magnitude}℃`;
+      if (value < 0) return `零下${magnitude}℃`;
+      return "0℃";
+    }
+    if (context.kind === "water") {
+      if (value > 0) return `水上${magnitude}${context.unit}`;
+      if (value < 0) return `水下${magnitude}${context.unit}`;
+      return "水面";
+    }
+    if (context.kind === "altitude") {
+      if (value > 0) return `海拔${magnitude}${context.unit}`;
+      if (value < 0) return `海平面以下${magnitude}${context.unit}`;
+      return "海平面";
+    }
+    return String(value);
+  }
+
+  function signedValueFromAnswer(answer, context) {
+    const numbers = extractNumbers(answer);
+    if (!numbers.length) {
+      return undefined;
+    }
+    const text = String(answer || "");
+    const magnitude = Math.abs(numbers[0]);
+    if (context.kind === "temperature") {
+      if (/零下|低于0/.test(text)) return -magnitude;
+      if (/零上|高于0/.test(text)) return magnitude;
+    }
+    if (context.kind === "water") {
+      if (/水下|低于水面/.test(text)) return -magnitude;
+      if (/水上|高于水面/.test(text)) return magnitude;
+    }
+    if (context.kind === "altitude") {
+      if (/海平面以下|低于海平面/.test(text)) return -magnitude;
+      if (/海拔|高于海平面|海平面以上/.test(text)) return magnitude;
+    }
+    return numbers[0];
+  }
+
+  function signedContextExplanation(value, context) {
+    if (context.kind === "temperature") {
+      return value < 0 ? "负号表示低于 0℃，所以要说成零下。" : value > 0 ? "正数表示高于 0℃，所以要说成零上。" : "0 表示正好在 0℃。";
+    }
+    if (context.kind === "water") {
+      return value < 0 ? "负号表示低于水面，所以生活语义是水下。" : value > 0 ? "正数表示高于水面，所以生活语义是水上。" : "0 表示正好在水面。";
+    }
+    if (context.kind === "altitude") {
+      return value < 0 ? "负号表示低于海平面，所以生活语义是海平面以下。" : value > 0 ? "正数表示高于海平面，所以生活语义是海拔。" : "0 表示正好在海平面。";
+    }
+    return "先把符号结果翻译成生活语义。";
+  }
+
+  function normalizeSignedSemanticQuestion(result) {
+    const context = signedContextFor(result.question);
+    if (!context) {
+      return result;
+    }
+    const value = typeof result.answerValue === "number" && Number.isFinite(result.answerValue)
+      ? Number(result.answerValue)
+      : signedValueFromAnswer(result.answer, context);
+    if (!Number.isFinite(value)) {
+      return result;
+    }
+    const numericText = round(value, 2);
+    const semanticText = signedSemanticText(value, context);
+    const semanticExplanation = `符号语义检查：数值结果是 ${numericText}，在本题语境中表示“${semanticText}”。${signedContextExplanation(value, context)}`;
+    const steps = Array.isArray(result.steps) ? [...result.steps] : [];
+    if (!steps.some((step) => String(step).includes("符号语义检查"))) {
+      steps.push(semanticExplanation);
+    }
     return {
+      ...result,
+      answer: `数值结果：${numericText}；语义结果：${semanticText}`,
+      answerValue: value,
+      aliases: Array.from(new Set([...(result.aliases || []), String(numericText), semanticText, `${numericText}${context.unit || ""}`])).filter(Boolean),
+      steps,
+      explanation: `${result.explanation || ""}${result.explanation ? " " : ""}${semanticExplanation}`
+    };
+  }
+
+  function questionResult(question, answer, options = {}) {
+    return normalizeSignedSemanticQuestion({
       question,
       answer,
       answerValue: options.answerValue,
@@ -558,7 +660,7 @@
       explanation: options.explanation || "先识别题目中的已知条件，再选择对应公式或规则求解。",
       type: options.type || "local-template",
       ...options
-    };
+    });
   }
 
   function basicGeometryEndpointQuestion() {
@@ -831,18 +933,23 @@
 
     switch (modelId) {
       case "rational-number": {
-        const x = randomInt(-15, -3);
-        const y = randomInt(4, 18);
-        const z = randomInt(2, 10);
-        const value = x + y - z;
+        const scenario = choice(["temperature", "water", "altitude"]);
+        const start = randomInt(6, 24);
+        const change = randomInt(2, 18);
+        const value = -start + change;
+        const question = scenario === "temperature"
+          ? `气温原来是 -${start}℃，后来上升 ${change}℃。现在气温是多少？`
+          : scenario === "water"
+            ? `潜水员在水下 ${start} 米处，随后上浮 ${change} 米。用水面为 0 米表示，现在的位置是多少？`
+            : `某地低于海平面 ${start} 米，后来上升 ${change} 米。以海平面为 0 米，现在的位置是多少？`;
         return questionResult(
-          `计算：${x} + ${y} - ${z} = ?`,
+          question,
           `${value}`,
           {
             answerValue: value,
             tolerance: 0.01,
-            steps: [`先算 ${x} + ${y} = ${x + y}`, `再算 ${x + y} - ${z} = ${value}`],
-            explanation: "有理数加减可以按顺序计算，注意负号和减号。"
+            steps: [`把起点记作 -${start}`, `变化记作 +${change}，列式 -${start} + ${change} = ${value}`],
+            explanation: "正负数应用题要先算数值结果，再把符号翻译成生活语义。"
           }
         );
       }

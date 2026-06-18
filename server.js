@@ -251,7 +251,17 @@ function normalizeGeneratedQuestion(value, fallback = null) {
   const parsed = typeof value === "string" ? JSON.parse(String(value || "").trim()) : value;
   const question = typeof parsed?.question === "string" ? parsed.question.trim() : "";
   const answer = typeof parsed?.answer === "string" ? parsed.answer.trim() : "";
-  const explanation = typeof parsed?.explanation === "string" ? parsed.explanation.trim() : "";
+  const analysis = typeof parsed?.analysis === "string" && parsed.analysis.trim()
+    ? parsed.analysis.trim()
+    : typeof parsed?.explanation === "string"
+      ? parsed.explanation.trim()
+      : "";
+  const knowledgePoint = typeof parsed?.knowledge_point === "string" && parsed.knowledge_point.trim()
+    ? parsed.knowledge_point.trim()
+    : typeof fallback?.knowledge_point === "string"
+      ? fallback.knowledge_point
+      : "";
+  const difficulty = Number(parsed?.difficulty ?? fallback?.difficulty ?? 1);
   const aliases = Array.isArray(parsed?.aliases)
     ? parsed.aliases.map((item) => String(item || "").trim()).filter(Boolean)
     : [];
@@ -261,7 +271,7 @@ function normalizeGeneratedQuestion(value, fallback = null) {
       ? fallback.steps
       : [];
 
-  if (!question || !answer || !explanation) {
+  if (!question || !answer || !analysis) {
     throw new Error("AI question json is incomplete");
   }
 
@@ -270,10 +280,12 @@ function normalizeGeneratedQuestion(value, fallback = null) {
     answer,
     answerValue: parsed?.answerValue ?? undefined,
     aliases,
-    steps: steps.length > 0 ? steps : [explanation],
-    explanation,
+    steps: steps.length > 0 ? steps : [analysis],
+    analysis,
+    explanation: analysis,
+    knowledge_point: knowledgePoint,
+    difficulty: Number.isFinite(difficulty) ? Math.min(5, Math.max(1, Math.round(difficulty))) : 1,
     type: typeof parsed?.type === "string" && parsed.type.trim() ? parsed.type.trim() : "ai-generated",
-    difficulty: typeof parsed?.difficulty === "string" && parsed.difficulty.trim() ? parsed.difficulty.trim() : undefined,
     variantStyle: typeof parsed?.variantStyle === "string" && parsed.variantStyle.trim() ? parsed.variantStyle.trim() : undefined,
     errorTags: Array.isArray(parsed?.errorTags)
       ? parsed.errorTags.map((item) => String(item || "").trim()).filter(Boolean)
@@ -403,27 +415,39 @@ async function handleGenerateQuestion(req, res) {
   }
 
   try {
-    const aiQuestion = await callAiJson(
-      [
-        "你是 AI数学陪练小程序的出题引擎，面向小学1-6年级和初中7-9年级学生。",
-        "只能返回一个 JSON 对象，不允许 Markdown、代码块或多余解释。",
-        "JSON 必须包含 question、answer、answerValue、aliases、steps、explanation、type、difficulty、variantStyle、errorTags。",
-        "answerValue 可以是数字、字符串或 null；aliases 和 errorTags 必须是字符串数组；steps 必须是字符串数组。",
-        "请先理解 localQuestion 的题型和知识点，再生成同知识点变式题。",
-        "变式不能只换数字，必须从同语义变式、反向提问、生活化应用题、易错辨析中选择一种。",
-        "题目要符合给定 modelId、年级和领域，答案必须稳定、可批改，不要生成超纲内容。",
-        "如果无法生成高质量变式，就返回与 localQuestion 同结构但参数、语义或问法变化后的 JSON。"
-      ].join("\n"),
-      {
-        modelId: body.modelId,
-        grade: body.grade,
-        domain: body.domain,
-        localQuestion: fallback
-      },
-      { max_tokens: 650, temperature: 0.8 }
-    );
+    const prompt = [
+      "你是 AI数学陪练小程序的出题引擎，面向小学1-6年级和初中7-9年级学生。",
+      "只能返回一个 JSON 对象，不允许 Markdown、代码块或多余解释。",
+      "JSON 必须包含 question、answer、analysis、knowledge_point、difficulty、type。",
+      "可额外包含 answerValue、aliases、steps、variantStyle、errorTags，aliases、steps、errorTags 必须是字符串数组。",
+      "输入会提供年级、知识点、难度1-5、题型和本地种子题，请按这些信息生成题目。",
+      "变式不能只换数字，必须从同语义变式、反向提问、生活化应用题、易错辨析、多步骤推理中选择一种。",
+      "题目要符合给定 modelId、年级和领域，答案必须稳定、可批改，不要生成超纲内容。",
+      "analysis 要给出清晰解析，difficulty 必须是 1 到 5 的整数，type 必须是 基础题、应用题、变式题、多步骤题 之一。",
+      "如果无法生成高质量变式，就返回与 localQuestion 同知识点但参数、场景或问法变化后的 JSON。"
+    ].join("\n");
+    const payload = {
+      modelId: body.modelId,
+      grade: body.grade,
+      domain: body.domain,
+      difficulty: body.difficulty,
+      questionType: body.questionType,
+      mode: body.mode,
+      studentProfile: body.studentProfile,
+      localQuestion: fallback
+    };
 
-    res.status(200).json(normalizeGeneratedQuestion(aiQuestion, fallback));
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const aiQuestion = await callAiJson(prompt, payload, { max_tokens: 650, temperature: 0.8 });
+        res.status(200).json(normalizeGeneratedQuestion(aiQuestion, fallback));
+        return;
+      } catch (error) {
+        // Retry once when the model returns invalid JSON or an incomplete answer.
+      }
+    }
+
+    res.status(200).json(fallback);
   } catch (error) {
     res.status(200).json(fallback);
   }

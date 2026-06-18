@@ -6,22 +6,25 @@
   const STORAGE = {
     progress: "aiMathCoachProgressV1",
     mistakes: "aiMathCoachMistakesV1",
-    history: "aiMathCoachHistoryV1"
+    history: "aiMathCoachHistoryV1",
+    profile: "aiMathCoachStudentProfileV2"
   };
 
   const MODE_LABELS = {
     basic: "基础练习",
     advanced: "提高练习",
     mistake: "易错题",
-    ai: "AI随机出题"
+    ai_generate: "AI自适应出题"
   };
 
   const MODE_HINTS = {
     basic: "先练核心题型，稳住基础分。",
     advanced: "加入条件变化和反向提问。",
     mistake: "聚焦常见错误，练会避坑。",
-    ai: "本地模板打底，再生成语义变式。"
+    ai_generate: "按画像、难度和题型调用大模型。"
   };
+
+  const QUESTION_TYPE_POOL = ["基础题", "应用题", "变式题", "多步骤题"];
 
   const TOPIC_GROUPS = {
     primary: [
@@ -214,6 +217,142 @@
     saveJson(STORAGE.history, history.slice(-300));
   }
 
+  function emptyProfile() {
+    return {
+      knowledge_mastery: {},
+      error_types: [],
+      accuracy_history: [],
+      current_difficulty: 1,
+      streak: { correct: 0, wrong: 0 },
+      recent: {
+        knowledge_points: [],
+        types: [],
+        difficulties: []
+      }
+    };
+  }
+
+  function getProfile() {
+    const profile = loadJson(STORAGE.profile, emptyProfile());
+    const normalized = { ...emptyProfile(), ...profile };
+    normalized.knowledge_mastery = profile.knowledge_mastery || {};
+    normalized.error_types = Array.isArray(profile.error_types) ? profile.error_types : [];
+    normalized.accuracy_history = Array.isArray(profile.accuracy_history) ? profile.accuracy_history : [];
+    normalized.streak = { correct: 0, wrong: 0, ...(profile.streak || {}) };
+    normalized.recent = {
+      knowledge_points: [],
+      types: [],
+      difficulties: [],
+      ...(profile.recent || {})
+    };
+    normalized.current_difficulty = clampDifficulty(Number(profile.current_difficulty || 1));
+    return normalized;
+  }
+
+  function saveProfile(profile) {
+    profile.current_difficulty = clampDifficulty(Number(profile.current_difficulty || 1));
+    profile.accuracy_history = (profile.accuracy_history || []).slice(-120);
+    profile.error_types = Array.from(new Set(profile.error_types || [])).slice(-40);
+    profile.recent = {
+      knowledge_points: (profile.recent?.knowledge_points || []).slice(-8),
+      types: (profile.recent?.types || []).slice(-8),
+      difficulties: (profile.recent?.difficulties || []).slice(-8)
+    };
+    saveJson(STORAGE.profile, profile);
+  }
+
+  function clamp(value, min, max) {
+    return Math.min(max, Math.max(min, value));
+  }
+
+  function clampDifficulty(value) {
+    return Math.round(clamp(Number(value) || 1, 1, 5));
+  }
+
+  function masteryFor(profile, knowledgePoint) {
+    const value = profile.knowledge_mastery?.[knowledgePoint];
+    return typeof value === "number" ? clamp(value, 0, 1) : 0.5;
+  }
+
+  function recentAllEqual(items, count, value) {
+    if (!Array.isArray(items) || items.length < count) {
+      return false;
+    }
+    return items.slice(-count).every((item) => item === value);
+  }
+
+  function recentAccuracy(profile, size = 10) {
+    const recent = (profile.accuracy_history || []).slice(-size);
+    if (!recent.length) {
+      return null;
+    }
+    const correct = recent.filter((item) => item.correct).length;
+    return correct / recent.length;
+  }
+
+  function selectQuestionType(mode) {
+    const profile = getProfile();
+    const preferred = {
+      basic: "基础题",
+      advanced: choice(["应用题", "多步骤题"]),
+      mistake: "变式题",
+      ai_generate: choice(["应用题", "变式题", "多步骤题"])
+    }[mode] || choice(QUESTION_TYPE_POOL);
+    if (!recentAllEqual(profile.recent.types, 2, preferred)) {
+      return preferred;
+    }
+    return choice(QUESTION_TYPE_POOL.filter((type) => type !== preferred));
+  }
+
+  function selectDifficultyForMode(mode) {
+    const profile = getProfile();
+    const base = clampDifficulty(profile.current_difficulty);
+    let target = base;
+    if (mode === "basic") {
+      target = Math.max(1, base - 1);
+    } else if (mode === "advanced") {
+      target = Math.min(5, base + 1);
+    } else if (mode === "mistake") {
+      target = Math.max(1, base);
+    } else if (mode === "ai_generate") {
+      target = base;
+    }
+
+    if (recentAllEqual(profile.recent.difficulties, 3, target)) {
+      target = target >= 5 ? 4 : target + 1;
+    }
+    return clampDifficulty(target);
+  }
+
+  function allTopicsForSection(section) {
+    const groups = TOPIC_GROUPS[section] || [];
+    const currentGrade = selectedGrade[section];
+    const sameGradeGroups = groups.filter((group) => group.grade === currentGrade);
+    return (sameGradeGroups.length ? sameGradeGroups : groups)
+      .flatMap((group) => group.topics.map((item) => ({ ...item, grade: group.grade })));
+  }
+
+  function selectTopicForDiversity(preferredTopic, mode) {
+    if (mode === "mistake") {
+      return preferredTopic;
+    }
+    const profile = getProfile();
+    if (!recentAllEqual(profile.recent.knowledge_points, 2, preferredTopic.id)) {
+      return preferredTopic;
+    }
+    const candidates = allTopicsForSection(currentSection)
+      .filter((item) => item.id !== preferredTopic.id);
+    return candidates.length ? choice(candidates) : preferredTopic;
+  }
+
+  function rememberGeneratedQuestion(question) {
+    const profile = getProfile();
+    profile.recent.knowledge_points = [...(profile.recent.knowledge_points || []), question.knowledgeId].slice(-8);
+    profile.recent.types = [...(profile.recent.types || []), question.type].slice(-8);
+    profile.recent.difficulties = [...(profile.recent.difficulties || []), question.difficulty].slice(-8);
+    saveProfile(profile);
+  }
+
   function escapeHTML(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -237,18 +376,28 @@
 
   function topicStats(topicId) {
     const progress = getProgress();
+    const topicItem = findTopic(topicId);
+    const profile = getProfile();
     const stats = progress.topics[topicId] || { total: 0, correct: 0, wrong: 0, mastery: 0 };
-    const mastery = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+    const mastery = topicItem
+      ? Math.round(masteryFor(profile, topicItem.title) * 100)
+      : stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
     return { ...stats, mastery };
   }
 
   function renderStatus() {
     const progress = getProgress();
+    const profile = getProfile();
     const accuracy = progress.total > 0 ? Math.round((progress.correct / progress.total) * 100) : 0;
+    const masteryValues = Object.values(profile.knowledge_mastery || {});
+    const mastery = masteryValues.length
+      ? Math.round((masteryValues.reduce((sum, value) => sum + value, 0) / masteryValues.length) * 100)
+      : accuracy;
     statusBar.innerHTML = `
       <span>连续 ${progress.streak || 0} 天</span>
       <span>星星 ${progress.stars || 0}</span>
-      <span>掌握度 ${accuracy}%</span>
+      <span>掌握度 ${mastery}%</span>
+      <span>难度 ${profile.current_difficulty || 1}</span>
       <span>今日 ${progress.todayCount || 0} 题</span>
     `;
   }
@@ -429,9 +578,10 @@
       <article class="question-box">
         <div class="question-meta-row">
           <span>${escapeHTML(currentQuestion.grade)}</span>
-          <span>${escapeHTML(currentQuestion.knowledge)}</span>
+          <span>${escapeHTML(currentQuestion.knowledge_point || currentQuestion.knowledge)}</span>
           <span>${escapeHTML(currentQuestion.type)}</span>
-          <span>${escapeHTML(currentQuestion.difficulty)}</span>
+          <span>难度 ${escapeHTML(currentQuestion.difficulty)}</span>
+          ${currentQuestion.subtype ? `<span>${escapeHTML(currentQuestion.subtype)}</span>` : ""}
         </div>
         <h4>题目</h4>
         <p>${escapeHTML(currentQuestion.question)}</p>
@@ -486,20 +636,22 @@
     isLoadingQuestion = true;
     renderTopicPractice(topicItem);
 
-    const localQuestion = generateLocalQuestion(topicItem, mode);
+    const effectiveTopic = selectTopicForDiversity(topicItem, mode);
+    const localQuestion = generateLocalQuestion(effectiveTopic, mode);
     let question = localQuestion;
 
-    if (mode === "ai") {
-      question = await generateAiVariant(topicItem, localQuestion);
+    if (mode === "ai_generate") {
+      question = await generateAiQuestion(effectiveTopic, localQuestion);
     }
 
     currentQuestion = question;
+    rememberGeneratedQuestion(question);
     currentResult = null;
     isLoadingQuestion = false;
     renderTopicPractice(topicItem);
   }
 
-  async function generateAiVariant(topicItem, localQuestion) {
+  async function generateAiQuestion(topicItem, localQuestion) {
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
         const response = await fetch("/api/generate-question", {
@@ -509,20 +661,27 @@
             modelId: topicItem.id,
             grade: topicItem.grade,
             domain: topicItem.domain,
+            mode: "ai_generate",
+            difficulty: localQuestion.difficulty,
+            questionType: localQuestion.type,
+            studentProfile: getProfile(),
             localQuestion: {
               question: localQuestion.question,
               answer: localQuestion.answer,
               answerValue: localQuestion.answerValue,
               aliases: localQuestion.aliases,
               steps: localQuestion.steps.map((step) => step.content || step),
+              analysis: localQuestion.analysis,
               explanation: localQuestion.explanation,
+              knowledge_point: localQuestion.knowledge_point,
+              difficulty: localQuestion.difficulty,
               type: localQuestion.type,
               variantStyle: localQuestion.variantStyle
             }
           })
         });
         const data = await response.json();
-        const normalized = normalizeQuestion(data, topicItem, "AI随机", localQuestion);
+        const normalized = normalizeQuestion(data, topicItem, localQuestion.difficulty, localQuestion);
         if (normalized.question && normalized.answer) {
           return normalized;
         }
@@ -533,12 +692,12 @@
 
     return {
       ...localQuestion,
-      difficulty: "AI随机",
-      type: `${localQuestion.type}变式`
+      type: localQuestion.type || "变式题"
     };
   }
 
   function normalizeQuestion(data, topicItem, difficulty, fallback) {
+    const analysis = String(data?.analysis || data?.explanation || fallback.analysis || fallback.explanation || "").trim();
     const steps = Array.isArray(data?.steps) && data.steps.length > 0
       ? data.steps.map((step, index) => ({
           title: `步骤${index + 1}`,
@@ -555,6 +714,7 @@
       grade: topicItem.grade,
       knowledgeId: topicItem.id,
       knowledge: topicItem.title,
+      knowledge_point: String(data?.knowledge_point || fallback.knowledge_point || topicItem.title).trim(),
       type: String(data?.type || fallback.type || "变式题").trim(),
       difficulty,
       question: String(data?.question || "").trim(),
@@ -562,22 +722,27 @@
       answerValue,
       aliases: Array.isArray(data?.aliases) ? data.aliases : fallback.aliases,
       steps,
-      explanation: String(data?.explanation || fallback.explanation || "").trim(),
-      errorTags: fallback.errorTags,
+      analysis,
+      explanation: analysis,
+      errorTags: Array.isArray(data?.errorTags) && data.errorTags.length ? data.errorTags : fallback.errorTags,
       commonMistake: fallback.commonMistake,
-      variantStyle: fallback.variantStyle
+      variantStyle: String(data?.variantStyle || fallback.variantStyle || "AI变式").trim()
     };
   }
 
   function baseQuestion(topicItem, mode, partial) {
-    const difficulty = MODE_LABELS[mode] || "基础练习";
+    const difficulty = partial.difficulty ? clampDifficulty(partial.difficulty) : selectDifficultyForMode(mode);
+    const questionType = partial.questionType || selectQuestionType(mode);
     const variantStyle = mode === "ai"
       ? choice(["同语义变式", "反向提问", "生活化应用题"])
+      : mode === "ai_generate"
+        ? choice(["同语义变式", "反向提问", "生活化应用题", "多步骤变式"])
       : mode === "advanced"
         ? choice(["反向提问", "条件变化"])
-        : mode === "mistake"
-          ? "易错辨析"
-          : "核心题型";
+      : mode === "mistake"
+        ? "易错辨析"
+        : "核心题型";
+    const analysis = partial.analysis || partial.explanation || "";
 
     return {
       id: `q_${Date.now()}_${randomInt(1000, 9999)}`,
@@ -585,14 +750,17 @@
       stage: topicItem.stageLabel,
       knowledgeId: topicItem.id,
       knowledge: topicItem.title,
-      type: partial.type || "计算题",
+      knowledge_point: topicItem.title,
+      type: questionType,
+      subtype: partial.type || "计算题",
       difficulty,
       question: partial.question,
       answer: partial.answer,
       answerValue: partial.answerValue,
       aliases: partial.aliases || [],
       steps: partial.steps || [],
-      explanation: partial.explanation || "",
+      analysis,
+      explanation: analysis,
       errorTags: partial.errorTags || ["方法选择"],
       commonMistake: partial.commonMistake || "只看数字，不看题目要求。",
       variantStyle
@@ -1261,6 +1429,64 @@
     }));
   }
 
+  function questionSignature(text) {
+    return normalizedText(text)
+      .replace(/-?\d+(?:\.\d+)?/g, "#")
+      .replace(/[a-z]/g, "x");
+  }
+
+  function applyReinforcementStyle(question, style, index) {
+    const prefixes = {
+      "改数字": "改数字强化：",
+      "改场景": "换一个生活场景：",
+      "改问法": "反向思考："
+    };
+    const prompts = {
+      "改数字": "请重新计算，并写出关键公式。",
+      "改场景": "请判断数量关系后再作答。",
+      "改问法": "请先说明思路，再给出答案。"
+    };
+    return {
+      ...question,
+      id: `reinforce_${Date.now()}_${index}_${randomInt(1000, 9999)}`,
+      type: "变式题",
+      variantStyle: style,
+      question: `${prefixes[style]}${question.question}${prompts[style]}`,
+      analysis: question.analysis || question.explanation,
+      explanation: question.analysis || question.explanation
+    };
+  }
+
+  function generateReinforcementQuestions(originalQuestion) {
+    const topicItem = findTopic(originalQuestion.knowledgeId) || selectedTopic;
+    if (!topicItem) {
+      return [];
+    }
+    const styles = ["改数字", "改场景", "改问法"];
+    const originalSignature = questionSignature(originalQuestion.question);
+    const used = new Set([originalSignature]);
+
+    return styles.map((style, index) => {
+      let candidate = null;
+      for (let attempt = 0; attempt < 12; attempt += 1) {
+        const next = generateLocalQuestion(topicItem, "mistake");
+        const styled = applyReinforcementStyle(next, style, index);
+        const signature = questionSignature(styled.question);
+        if (!used.has(signature)) {
+          used.add(signature);
+          candidate = styled;
+          break;
+        }
+      }
+      if (candidate) {
+        return candidate;
+      }
+      const fallback = applyReinforcementStyle(generateLocalQuestion(topicItem, "mistake"), style, index);
+      used.add(questionSignature(fallback.question));
+      return fallback;
+    });
+  }
+
   function gradeCurrentQuestion(userAnswer) {
     const question = currentQuestion;
     const userText = normalizedText(userAnswer);
@@ -1282,7 +1508,7 @@
       correct,
       userAnswer,
       cause,
-      variant: generateLocalQuestion(findTopic(question.knowledgeId) || selectedTopic, "mistake")
+      reinforcementQuestions: correct ? [] : generateReinforcementQuestions(question)
     };
   }
 
@@ -1307,6 +1533,13 @@
       </li>
     `).join("");
 
+    const variants = (result.reinforcementQuestions || []).map((variant, index) => `
+      <li>
+        <strong>${index + 1}. ${escapeHTML(variant.variantStyle || "变式强化")}</strong>
+        <span>${escapeHTML(variant.question)}</span>
+      </li>
+    `).join("");
+
     return `
       <div class="grade-result ${result.correct ? "correct" : "wrong"}">
         <h4>${result.correct ? "判断结果：正确" : "判断结果：错误"}</h4>
@@ -1325,15 +1558,72 @@
           <ol>${steps}</ol>
         </div>
         <p class="mistake-tip"><strong>易错点：</strong>${escapeHTML(question.commonMistake)}</p>
-        <div class="variant-card">
-          <h5>同类变式题</h5>
-          <p>${escapeHTML(result.variant.question)}</p>
-        </div>
+        ${variants ? `
+          <div class="variant-card">
+            <h5>错题强化：3道同知识点变式题</h5>
+            <ol>${variants}</ol>
+          </div>
+        ` : ""}
       </div>
     `;
   }
 
+  function updateStudentProfile(question, result) {
+    const profile = getProfile();
+    const knowledgePoint = question.knowledge_point || question.knowledge;
+    const previousMastery = masteryFor(profile, knowledgePoint);
+    const delta = result.correct ? 0.05 : -0.05;
+    profile.knowledge_mastery[knowledgePoint] = Number(clamp(previousMastery + delta, 0, 1).toFixed(2));
+
+    if (result.correct) {
+      profile.streak.correct = (profile.streak.correct || 0) + 1;
+      profile.streak.wrong = 0;
+    } else {
+      profile.streak.wrong = (profile.streak.wrong || 0) + 1;
+      profile.streak.correct = 0;
+      profile.error_types = [
+        ...(profile.error_types || []),
+        ...(question.errorTags || []),
+        result.cause
+      ].filter(Boolean);
+    }
+
+    profile.accuracy_history = [
+      ...(profile.accuracy_history || []),
+      {
+        time: new Date().toISOString(),
+        knowledge_point: knowledgePoint,
+        type: question.type,
+        difficulty: question.difficulty,
+        correct: result.correct,
+        error_types: result.correct ? [] : question.errorTags || []
+      }
+    ].slice(-120);
+
+    const accuracy = recentAccuracy(profile, 10);
+    if (accuracy !== null && accuracy > 0.85) {
+      profile.current_difficulty += 1;
+    } else if (accuracy !== null && accuracy < 0.6) {
+      profile.current_difficulty -= 1;
+    }
+
+    if ((profile.streak.correct || 0) >= 3) {
+      profile.current_difficulty += 1;
+      profile.streak.correct = 0;
+    }
+
+    if ((profile.streak.wrong || 0) >= 2) {
+      profile.current_difficulty -= 1;
+      profile.needs_reinforcement = true;
+      profile.streak.wrong = 0;
+    }
+
+    saveProfile(profile);
+    return profile;
+  }
+
   function recordAttempt(topicItem, question, userAnswer, result) {
+    const profile = updateStudentProfile(question, result);
     const progress = getProgress();
     const today = todayKey();
     if (progress.lastStudyDate !== today) {
@@ -1347,12 +1637,13 @@
     progress.wrong = (progress.wrong || 0) + (result.correct ? 0 : 1);
     progress.stars = (progress.stars || 0) + (result.correct ? 2 : 1);
 
-    const stats = progress.topics[topicItem.id] || { total: 0, correct: 0, wrong: 0 };
+    const statsKey = question.knowledgeId || topicItem.id;
+    const stats = progress.topics[statsKey] || { total: 0, correct: 0, wrong: 0 };
     stats.total += 1;
     stats.correct += result.correct ? 1 : 0;
     stats.wrong += result.correct ? 0 : 1;
     stats.mastery = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
-    progress.topics[topicItem.id] = stats;
+    progress.topics[statsKey] = stats;
     saveProgress(progress);
 
     const record = {
@@ -1361,16 +1652,24 @@
       grade: question.grade,
       knowledgeId: question.knowledgeId,
       knowledge: question.knowledge,
+      knowledge_point: question.knowledge_point || question.knowledge,
       type: question.type,
+      subtype: question.subtype,
       difficulty: question.difficulty,
       question: question.question,
       userAnswer,
       answer: question.answer,
+      analysis: question.analysis,
       explanation: question.explanation,
       steps: question.steps,
       errorTags: question.errorTags,
       correct: result.correct,
-      cause: result.cause
+      cause: result.cause,
+      reinforcementQuestions: result.reinforcementQuestions || [],
+      studentProfile: {
+        mastery: profile.knowledge_mastery[question.knowledge_point || question.knowledge],
+        current_difficulty: profile.current_difficulty
+      }
     };
 
     saveHistory([...getHistory(), record]);
@@ -1508,15 +1807,17 @@
 
   function renderReport() {
     const progress = getProgress();
+    const profile = getProfile();
     const history = getHistory();
     const accuracy = progress.total > 0 ? Math.round((progress.correct / progress.total) * 100) : 0;
     const topicRows = Object.entries(progress.topics || {})
       .map(([id, stats]) => {
         const topicItem = findTopic(id);
-        const mastery = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+        const mastery = topicItem ? Math.round(masteryFor(profile, topicItem.title) * 100) : stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
         return { id, title: topicItem?.title || id, grade: topicItem?.grade || "", mastery, stats };
       })
       .sort((a, b) => b.stats.total - a.stats.total);
+    const errorTypes = (profile.error_types || []).slice(-6);
 
     app.innerHTML = `
       <section class="trainer-panel">
@@ -1532,7 +1833,9 @@
           <div class="report-card"><strong>${progress.correct || 0}</strong><span>答对</span></div>
           <div class="report-card"><strong>${accuracy}%</strong><span>正确率</span></div>
           <div class="report-card"><strong>${progress.stars || 0}</strong><span>星星</span></div>
+          <div class="report-card"><strong>${profile.current_difficulty || 1}</strong><span>当前难度</span></div>
         </div>
+        ${errorTypes.length ? `<div class="knowledge-tags inline-tags report-error-tags">${errorTypes.map((tag) => `<span>${escapeHTML(tag)}</span>`).join("")}</div>` : ""}
         <div class="report-list">
           ${topicRows.length ? topicRows.map((row) => `
             <div class="report-row">

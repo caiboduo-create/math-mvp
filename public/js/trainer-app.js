@@ -129,6 +129,8 @@
   let currentResult = null;
   let isLoadingQuestion = false;
   let currentQuestionStartedAt = 0;
+  let currentLecture = null;
+  let lectureTimer = null;
 
   function topic(id, title, stageLabel, domain, tags, generator, detailHref = "") {
     return { id, title, stageLabel, domain, tags, generator, detailHref };
@@ -792,6 +794,7 @@
     `;
 
     app.querySelector(".back-to-map").addEventListener("click", () => {
+      stopLecturePlayback();
       selectedTopic = null;
       currentQuestion = null;
       currentResult = null;
@@ -807,6 +810,7 @@
 
     app.querySelector("#newQuestionButton").addEventListener("click", () => startQuestion(topicItem, currentMode));
     bindQuestionEvents(topicItem);
+    bindAnimationLectureEvents();
   }
 
   function renderQuestionArea() {
@@ -864,6 +868,7 @@
       const result = app.querySelector("#gradeResult");
       if (result) {
         result.innerHTML = renderGradeResult(currentResult);
+        bindAnimationLectureEvents();
       }
       renderStatus();
     });
@@ -881,6 +886,7 @@
     currentQuestion = null;
     currentResult = null;
     isLoadingQuestion = true;
+    stopLecturePlayback();
     renderTopicPractice(topicItem);
 
     const effectiveTopic = selectTopicForDiversity(topicItem, mode);
@@ -1932,8 +1938,374 @@
     return "一句话记住：先读懂题目问什么，再选择公式或规则。";
   }
 
+  function visualTypeForQuestion(question) {
+    const text = `${question.knowledge_point || question.knowledge || ""}${question.subtype || ""}${question.question || ""}`;
+    if (/有理数|正负|气温|温度|水下|潜水|海拔|海平面/.test(text)) {
+      return "number_line";
+    }
+    if (/几何|三角形|角|线段|射线|直线|面积|周长|圆|勾股|坐标|象限/.test(text)) {
+      return "geometry";
+    }
+    return "";
+  }
+
+  function formulaFromText(text) {
+    const source = String(text || "");
+    const match = source.match(/[^，。；\n]*[=＋+\-×÷][^，。；\n]*/);
+    return match ? match[0].trim() : "";
+  }
+
+  function normalizeAnimationStep(step, index, visualType, total) {
+    const rawTitle = typeof step === "object" ? step.title : "";
+    const rawContent = typeof step === "object" ? step.content : step;
+    const rawExplain = typeof step === "object" ? step.explain : "";
+    const content = String(rawContent || "").trim();
+    const explain = String(rawExplain || "").trim();
+    const title = rawTitle || (index === 0 ? "看懂题意" : index === total - 1 ? "得到答案" : `第${index + 1}步`);
+    const actionMap = {
+      number_line: ["show_start", "show_move", "show_result", "show_semantic"],
+      geometry: ["draw_shape", "show_labels", "show_formula", "show_result"],
+      cartoon: ["show_objects", "group_objects", "show_formula", "show_result"],
+      scene: ["read_problem", "build_relation", "calculate", "show_result"]
+    };
+    const actions = actionMap[visualType] || actionMap.scene;
+    return {
+      title,
+      narration: explain ? `${content} ${explain}` : content,
+      formula: formulaFromText(content),
+      action: actions[Math.min(index, actions.length - 1)],
+      highlight: index === total - 1 ? ["result", "answer"] : index === 0 ? ["given"] : ["focus"]
+    };
+  }
+
+  function buildAnimationLesson(question, result) {
+    const visualType = visualTypeForQuestion(question);
+    if (!visualType) {
+      return null;
+    }
+    const baseSteps = Array.isArray(question.steps) && question.steps.length > 0
+      ? question.steps
+      : [
+          { title: "看懂题意", content: question.question, explain: "先找已知条件和问题。" },
+          { title: "建立关系", content: question.analysis || question.explanation || "选择对应公式或规则。", explain: "把题目翻译成数学关系。" },
+          { title: "得到答案", content: `答案是 ${question.answer}`, explain: "最后检查单位、符号或生活语义。" }
+        ];
+    const animationSteps = baseSteps
+      .slice(0, 5)
+      .map((step, index, arr) => normalizeAnimationStep(step, index, visualType, arr.length));
+    const summary = result?.memorySummary || buildMemorySummary(question, result || {});
+    const lesson = {
+      question: question.question,
+      answer: question.answer,
+      analysis: question.analysis || question.explanation || "",
+      visual_type: visualType,
+      animation_steps: animationSteps,
+      common_mistakes: [question.commonMistake || "先看清题目问什么，再开始计算。"],
+      summary
+    };
+    question.visual_type = lesson.visual_type;
+    question.animation_steps = lesson.animation_steps;
+    question.common_mistakes = lesson.common_mistakes;
+    question.summary = lesson.summary;
+    return lesson;
+  }
+
+  function renderAnimatedLecture(lesson) {
+    const steps = lesson.animation_steps || [];
+    const active = steps[0] || {};
+    const progressItems = steps.map((step, index) => `
+      <button type="button" class="lecture-step-dot ${index === 0 ? "active" : ""}" data-lecture-step="${index}" aria-label="跳到${escapeHTML(step.title)}">
+        <span>${index + 1}</span>
+      </button>
+    `).join("");
+    currentLecture = lesson;
+    return `
+      <section class="animated-lecture" data-current-step="0" data-playing="false">
+        <div class="lecture-topline">
+          <div>
+            <p class="lecture-kicker">动画讲解模式</p>
+            <h5>像老师一样一步步讲题</h5>
+          </div>
+          <span class="lecture-count"><b data-lecture-current>1</b> / ${steps.length}</span>
+        </div>
+        <article class="lecture-question-card">
+          <span>题目</span>
+          <p>${escapeHTML(lesson.question)}</p>
+        </article>
+        <div class="lecture-stage" data-visual="${escapeHTML(lesson.visual_type)}">
+          <div class="lecture-stage-visual">${renderLectureStage(lesson, 0)}</div>
+        </div>
+        <article class="lecture-narration">
+          <span class="lecture-step-title">${escapeHTML(active.title || "看懂题意")}</span>
+          <p class="lecture-step-text">${escapeHTML(active.narration || "先读题，找出已知条件。")}</p>
+          <strong class="lecture-step-formula ${active.formula ? "" : "hidden"}">${escapeHTML(active.formula || "")}</strong>
+        </article>
+        <div class="lecture-progress-wrap">
+          <div class="lecture-progress-bar"><i style="width:${steps.length ? 100 / steps.length : 0}%"></i></div>
+          <div class="lecture-step-list">${progressItems}</div>
+        </div>
+        <div class="lecture-controls" aria-label="动画讲解控制">
+          <button type="button" data-lecture-action="play">开始动画讲解</button>
+          <button type="button" data-lecture-action="pause">暂停</button>
+          <button type="button" data-lecture-action="resume">继续</button>
+          <button type="button" data-lecture-action="prev">上一步</button>
+          <button type="button" data-lecture-action="next">下一步</button>
+          <button type="button" data-lecture-action="replay">重新播放</button>
+        </div>
+      </section>
+    `;
+  }
+
+  function signedStageData(question) {
+    const context = signedContextFor(question?.question);
+    const values = extractNumbers(question?.question);
+    let start = values[0] || 0;
+    if (context?.kind === "water" && /水下|低于水面/.test(question.question) && start > 0) {
+      start = -start;
+    }
+    if (context?.kind === "altitude" && /低于海平面|海平面以下/.test(question.question) && start > 0) {
+      start = -start;
+    }
+    const change = values.find((value, index) => index > 0 && value !== 0) || 0;
+    const result = typeof question.answerValue === "number" ? question.answerValue : extractNumbers(question.answer)[0] || start + change;
+    return { context, start, change, result };
+  }
+
+  function mapNumberToX(value, min, max) {
+    if (max === min) return 180;
+    return 36 + ((value - min) / (max - min)) * 288;
+  }
+
+  function renderNumberLineStage(lesson, stepIndex) {
+    const { start, change, result, context } = signedStageData(currentQuestion || {});
+    const min = Math.min(-10, start, result, start + change) - 2;
+    const max = Math.max(10, start, result, start + change) + 2;
+    const startX = mapNumberToX(start, min, max);
+    const resultX = mapNumberToX(result, min, max);
+    const showMove = stepIndex >= 1;
+    const showResult = stepIndex >= Math.min(2, lesson.animation_steps.length - 1);
+    const semantic = context ? signedSemanticText(result, context) : String(result);
+    const sceneLabel = context?.kind === "temperature" ? "温度计" : context?.kind === "water" ? "水位线" : context?.kind === "altitude" ? "海平面" : "数轴";
+    return `
+      <svg viewBox="0 0 360 210" class="lecture-svg number-line-svg" role="img" aria-label="正负数数轴动画">
+        <defs>
+          <marker id="lectureArrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"></path>
+          </marker>
+        </defs>
+        <rect x="14" y="14" width="332" height="182" rx="18" fill="#f8fbff"></rect>
+        <text x="28" y="42" class="stage-caption">${escapeHTML(sceneLabel)}：先定位起点，再看移动方向</text>
+        <line x1="36" y1="118" x2="324" y2="118" class="axis-line"></line>
+        <line x1="180" y1="108" x2="180" y2="128" class="zero-mark"></line>
+        <text x="176" y="148" class="axis-label">0</text>
+        <circle cx="${startX}" cy="118" r="9" class="stage-point ${stepIndex === 0 ? "is-active" : ""}"></circle>
+        <text x="${Math.max(24, startX - 32)}" y="96" class="point-label">起点 ${round(start, 2)}</text>
+        ${showMove ? `<path d="M${startX} 84 C${(startX + resultX) / 2} 52, ${(startX + resultX) / 2} 52, ${resultX} 84" class="move-arrow ${stepIndex === 1 ? "is-active" : ""}" marker-end="url(#lectureArrow)"></path>` : ""}
+        ${showResult ? `
+          <circle cx="${resultX}" cy="118" r="11" class="result-point ${stepIndex >= 2 ? "is-active" : ""}"></circle>
+          <text x="${Math.min(250, Math.max(24, resultX - 42))}" y="174" class="result-label">结果 ${round(result, 2)}</text>
+          <g class="semantic-bubble">
+            <rect x="92" y="22" width="176" height="34" rx="17"></rect>
+            <text x="180" y="44">${escapeHTML(semantic)}</text>
+          </g>
+        ` : ""}
+      </svg>
+    `;
+  }
+
+  function renderGeometryStage(lesson, stepIndex) {
+    const showLabels = stepIndex >= 1;
+    const showFormula = stepIndex >= 2;
+    const showResult = stepIndex >= lesson.animation_steps.length - 1;
+    return `
+      <svg viewBox="0 0 360 230" class="lecture-svg geometry-svg" role="img" aria-label="几何图形动画讲解">
+        <rect x="14" y="14" width="332" height="202" rx="18" fill="#f8fbff"></rect>
+        <path d="M72 172 L278 172 L128 54 Z" class="shape-line ${stepIndex === 0 ? "is-active" : ""}"></path>
+        <path d="M128 54 L128 172" class="helper-line ${showLabels ? "is-visible" : ""}"></path>
+        <path d="M72 172 L112 172 L112 132" class="angle-mark ${showLabels ? "is-visible is-active" : ""}"></path>
+        ${showLabels ? `
+          <text x="158" y="190" class="point-label">底边</text>
+          <text x="136" y="118" class="point-label">高</text>
+          <text x="84" y="166" class="point-label">角/边</text>
+        ` : ""}
+        ${showFormula ? `
+          <g class="formula-card ${stepIndex === 2 ? "is-active" : ""}">
+            <rect x="96" y="22" width="168" height="38" rx="18"></rect>
+            <text x="180" y="46">${escapeHTML(lesson.animation_steps[stepIndex]?.formula || "选择对应公式")}</text>
+          </g>
+        ` : ""}
+        ${showResult ? `
+          <g class="result-badge is-active">
+            <rect x="94" y="76" width="172" height="42" rx="21"></rect>
+            <text x="180" y="103">${escapeHTML(currentQuestion?.answer || lesson.answer)}</text>
+          </g>
+        ` : ""}
+      </svg>
+    `;
+  }
+
+  function renderCartoonStage(lesson, stepIndex) {
+    const numbers = extractNumbers(lesson.question);
+    const first = Math.max(1, Math.min(6, Math.abs(numbers[0] || 4)));
+    const second = Math.max(1, Math.min(6, Math.abs(numbers[1] || 3)));
+    const showSecond = stepIndex >= 1;
+    const showResult = stepIndex >= lesson.animation_steps.length - 1;
+    const circles = (count, y, color, offset = 0) => Array.from({ length: count }, (_, index) => {
+      const x = 62 + index * 34 + offset;
+      return `<circle cx="${x}" cy="${y}" r="13" class="${color}"></circle>`;
+    }).join("");
+    return `
+      <svg viewBox="0 0 360 220" class="lecture-svg cartoon-svg" role="img" aria-label="实物化动画讲解">
+        <rect x="14" y="14" width="332" height="192" rx="18" fill="#fffaf0"></rect>
+        <text x="28" y="42" class="stage-caption">用实物先看懂数量关系</text>
+        <g class="object-row ${stepIndex === 0 ? "is-active" : ""}">${circles(first, 92, "object-blue")}</g>
+        ${showSecond ? `<g class="object-row ${stepIndex === 1 ? "is-active" : ""}">${circles(second, 136, "object-orange", 10)}</g>` : ""}
+        ${showResult ? `
+          <g class="result-badge is-active">
+            <rect x="86" y="162" width="188" height="34" rx="17"></rect>
+            <text x="180" y="184">${escapeHTML(currentQuestion?.answer || lesson.answer)}</text>
+          </g>
+        ` : ""}
+      </svg>
+    `;
+  }
+
+  function renderSceneStage(lesson, stepIndex) {
+    const steps = lesson.animation_steps || [];
+    const active = steps[stepIndex] || steps[0] || {};
+    return `
+      <svg viewBox="0 0 360 220" class="lecture-svg scene-svg" role="img" aria-label="应用题关系动画讲解">
+        <defs>
+          <marker id="sceneLectureArrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"></path>
+          </marker>
+        </defs>
+        <rect x="14" y="14" width="332" height="192" rx="18" fill="#f8fbff"></rect>
+        <text x="28" y="42" class="stage-caption">把文字题翻译成关系图</text>
+        <g class="scene-card ${stepIndex === 0 ? "is-active" : ""}">
+          <rect x="44" y="70" width="112" height="56" rx="14"></rect>
+          <text x="100" y="103">已知条件</text>
+        </g>
+        <path d="M158 98 L202 98" class="move-arrow ${stepIndex >= 1 ? "is-active" : ""}" marker-end="url(#sceneLectureArrow)"></path>
+        <g class="scene-card ${stepIndex >= 1 ? "is-active" : ""}">
+          <rect x="204" y="70" width="112" height="56" rx="14"></rect>
+          <text x="260" y="103">数学关系</text>
+        </g>
+        ${stepIndex >= 2 ? `
+          <g class="formula-card is-active">
+            <rect x="66" y="148" width="228" height="38" rx="19"></rect>
+            <text x="180" y="172">${escapeHTML(active.formula || currentQuestion?.answer || lesson.answer)}</text>
+          </g>
+        ` : ""}
+      </svg>
+    `;
+  }
+
+  function renderLectureStage(lesson, stepIndex) {
+    if (lesson.visual_type === "number_line") {
+      return renderNumberLineStage(lesson, stepIndex);
+    }
+    if (lesson.visual_type === "geometry") {
+      return renderGeometryStage(lesson, stepIndex);
+    }
+    return "";
+  }
+
+  function stopLecturePlayback() {
+    if (lectureTimer) {
+      clearInterval(lectureTimer);
+      lectureTimer = null;
+    }
+    const root = app?.querySelector?.(".animated-lecture");
+    if (root) {
+      root.dataset.playing = "false";
+    }
+  }
+
+  function setLectureStep(root, index) {
+    if (!root || !currentLecture) {
+      return;
+    }
+    const steps = currentLecture.animation_steps || [];
+    const nextIndex = Math.max(0, Math.min(index, steps.length - 1));
+    const active = steps[nextIndex] || {};
+    root.dataset.currentStep = String(nextIndex);
+    const visual = root.querySelector(".lecture-stage-visual");
+    const title = root.querySelector(".lecture-step-title");
+    const text = root.querySelector(".lecture-step-text");
+    const formula = root.querySelector(".lecture-step-formula");
+    const current = root.querySelector("[data-lecture-current]");
+    const bar = root.querySelector(".lecture-progress-bar i");
+    if (visual) visual.innerHTML = renderLectureStage(currentLecture, nextIndex);
+    if (title) title.textContent = active.title || `第${nextIndex + 1}步`;
+    if (text) text.textContent = active.narration || "";
+    if (formula) {
+      formula.textContent = active.formula || "";
+      formula.classList.toggle("hidden", !active.formula);
+    }
+    if (current) current.textContent = String(nextIndex + 1);
+    if (bar) bar.style.width = `${steps.length ? ((nextIndex + 1) / steps.length) * 100 : 0}%`;
+    root.querySelectorAll(".lecture-step-dot").forEach((dot, dotIndex) => {
+      dot.classList.toggle("active", dotIndex === nextIndex);
+      dot.classList.toggle("done", dotIndex < nextIndex);
+    });
+  }
+
+  function startLecturePlayback(root) {
+    if (!root || !currentLecture) {
+      return;
+    }
+    stopLecturePlayback();
+    root.dataset.playing = "true";
+    const steps = currentLecture.animation_steps || [];
+    lectureTimer = setInterval(() => {
+      const currentIndex = Number(root.dataset.currentStep || 0);
+      if (currentIndex >= steps.length - 1) {
+        stopLecturePlayback();
+        return;
+      }
+      setLectureStep(root, currentIndex + 1);
+    }, 2600);
+  }
+
+  function bindAnimationLectureEvents() {
+    const root = app.querySelector(".animated-lecture");
+    if (!root) {
+      return;
+    }
+    setLectureStep(root, Number(root.dataset.currentStep || 0));
+    root.querySelectorAll("[data-lecture-action]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const action = button.dataset.lectureAction;
+        const currentIndex = Number(root.dataset.currentStep || 0);
+        if (action === "play" || action === "resume") {
+          startLecturePlayback(root);
+        } else if (action === "pause") {
+          stopLecturePlayback();
+        } else if (action === "prev") {
+          stopLecturePlayback();
+          setLectureStep(root, currentIndex - 1);
+        } else if (action === "next") {
+          stopLecturePlayback();
+          setLectureStep(root, currentIndex + 1);
+        } else if (action === "replay") {
+          stopLecturePlayback();
+          setLectureStep(root, 0);
+          startLecturePlayback(root);
+        }
+      });
+    });
+    root.querySelectorAll("[data-lecture-step]").forEach((button) => {
+      button.addEventListener("click", () => {
+        stopLecturePlayback();
+        setLectureStep(root, Number(button.dataset.lectureStep || 0));
+      });
+    });
+  }
+
   function renderGradeResult(result) {
     const question = currentQuestion;
+    const lesson = buildAnimationLesson(question, result);
     const steps = (question.steps || []).map((step) => `
       <li>
         <strong>${escapeHTML(step.title || "步骤")}</strong>
@@ -1970,10 +2342,12 @@
             <p>${escapeHTML(result.cause)} 这类题最容易在“条件判断”和“计算步骤”之间断开，所以要先确认题目问的是什么。</p>
           </div>
         ` : ""}
-        <div class="step-card">
-          <h5>${result.correct ? "解题步骤" : "正确思路一步步拆解"}</h5>
-          <ol>${steps}</ol>
-        </div>
+        ${lesson ? renderAnimatedLecture(lesson) : `
+          <div class="step-card">
+            <h5>${result.correct ? "解题步骤" : "正确思路一步步拆解"}</h5>
+            <ol>${steps}</ol>
+          </div>
+        `}
         <p class="mistake-tip"><strong>易错点：</strong>${escapeHTML(question.commonMistake)}</p>
         ${!result.correct && firstVariant ? `
           <div class="variant-card">

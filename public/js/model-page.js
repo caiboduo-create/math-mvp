@@ -357,7 +357,8 @@
       .replace(/\r\n/g, "\n")
       .replace(/```[a-zA-Z0-9_-]*\n?/g, "")
       .replace(/```/g, "")
-      .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+      .replace(/^\s{0,3}#{1,6}\s*(.+)$/gm, "$1")
+      .replace(/^\s{0,3}[*+-]\s+/gm, "")
       .replace(/^\s{0,3}[-*_]{3,}\s*$/gm, "")
       .replace(/\n{3,}/g, "\n\n")
       .trim();
@@ -365,6 +366,8 @@
     return escapeHtml(cleanedText)
       .replace(/\*\*([\s\S]*?)\*\*/g, "<strong>$1</strong>")
       .replace(/\*\*/g, "")
+      .replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, "$1<em>$2</em>")
+      .replace(/^\s*\*\s*/gm, "")
       .replace(/`/g, "")
       .replace(/\n/g, "<br>");
   }

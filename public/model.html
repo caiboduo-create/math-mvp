@@ -13,6 +13,7 @@
         <div>
           <p class="eyebrow">AI数学学习产品V4</p>
           <h1 id="modelTitle">加载中</h1>
+          <p class="model-subtitle" id="modelMetaLine"></p>
         </div>
         <div class="mistake-pill" id="mistakeCount">本模型错题数量：0</div>
       </div>
@@ -21,15 +22,16 @@
     <main class="shell page-main model-grid">
       <section class="card visual-card">
         <div class="card-heading">
-          <h2>SVG动态图</h2>
+          <h2>知识点概览</h2>
           <p id="modelDescription"></p>
         </div>
+        <div class="overview-panel" id="overviewPanel"></div>
         <svg id="modelSvg" class="model-svg" role="img" aria-label="模型动态图"></svg>
       </section>
 
       <section class="card controls-card">
         <div class="card-heading">
-          <h2>参数滑块</h2>
+          <h2>核心公式与例题</h2>
         </div>
         <div id="sliderPanel" class="slider-panel"></div>
         <div id="metricPanel" class="metric-panel"></div>

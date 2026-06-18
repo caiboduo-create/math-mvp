@@ -70,6 +70,12 @@ textarea {
   min-height: 92px;
 }
 
+.model-subtitle {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-weight: 800;
+}
+
 .eyebrow {
   margin: 0 0 8px;
   color: var(--blue-700);
@@ -120,6 +126,30 @@ h2 {
   font-weight: 700;
 }
 
+.filter-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 18px;
+}
+
+.filter-button {
+  min-height: 38px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 14px;
+  color: var(--blue-700);
+  background: #ffffff;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.filter-button.is-active {
+  border-color: var(--blue-700);
+  color: #ffffff;
+  background: var(--blue-700);
+}
+
 .mistake-pill {
   display: inline-flex;
   min-height: 42px;
@@ -135,7 +165,7 @@ h2 {
 
 .catalog-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -183,8 +213,14 @@ h2 {
   font-weight: 800;
 }
 
+.model-meta {
+  color: var(--blue-700);
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
 .model-summary {
-  min-height: 72px;
+  min-height: 82px;
   color: var(--muted);
   line-height: 1.7;
 }
@@ -276,6 +312,10 @@ h2 {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f8fbff;
+}
+
+.model-svg[hidden] {
+  display: none;
 }
 
 .shape-fill {
@@ -400,6 +440,40 @@ input[type="range"] {
 .metric-item strong {
   color: var(--blue-900);
   overflow-wrap: anywhere;
+}
+
+.overview-panel {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.detail-tags {
+  grid-column: 1 / -1;
+}
+
+.formula-block {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--blue-050);
+}
+
+.formula-block h3,
+.control-subtitle {
+  margin: 0 0 10px;
+  color: var(--blue-900);
+  font-size: 1rem;
+}
+
+.detail-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+  color: var(--ink);
+  line-height: 1.7;
 }
 
 .stats-panel {
@@ -594,6 +668,10 @@ a:focus-visible {
 @media (max-width: 920px) {
   .catalog-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .overview-panel {
+    grid-template-columns: 1fr;
   }
 
   .model-grid {

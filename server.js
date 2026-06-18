@@ -162,6 +162,8 @@ function localAnswer(payload) {
 
   return [
     `你正在研究「${payload.modelName || "数学模型"}」。`,
+    payload.modelGrade || payload.modelDomain ? `所属范围：${[payload.modelGrade, payload.modelDomain].filter(Boolean).join(" · ")}。` : "",
+    Array.isArray(payload.formula) && payload.formula.length > 0 ? `核心公式或规则：${payload.formula.join("；")}` : "",
     paramText ? `当前参数是：${paramText}。` : "",
     `关于“${payload.question}”，可以先抓住图形中的关键量，再代入对应公式。`,
     "如果题目问变化趋势，就观察滑块变化时图形面积、长度或位置怎样同步变化。"
@@ -189,7 +191,7 @@ function systemPromptFor(payload) {
   return [
     "你是数学AI课件系统里的助教。用中文回答，面向中学生，解释要短、清楚、带公式意识。",
     "回答必须使用普通中文分段，不要使用 Markdown 语法。",
-    "禁止使用 **加粗**、### 标题、``` 代码块、反引号或 Markdown 列表符号。",
+    "禁止使用 Markdown 加粗、标题、代码块、反引号或列表符号。",
     "可以直接写公式，例如：面积 =（圆心角 ÷ 360）× π × 半径²。",
     "如果解释平方关系，要用自然语言说明，不要用 Markdown 包裹公式。"
   ].join("\n");
@@ -284,6 +286,9 @@ async function handleAsk(req, res) {
       intent: body.intent,
       modelId: body.modelId,
       modelName: body.modelName,
+      modelGrade: body.modelGrade,
+      modelDomain: body.modelDomain,
+      formula: body.formula,
       question,
       parameters: body.parameters || {}
     });

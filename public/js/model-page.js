@@ -10,7 +10,9 @@
   const recentQuestionTexts = [];
 
   const title = document.getElementById("modelTitle");
+  const metaLine = document.getElementById("modelMetaLine");
   const description = document.getElementById("modelDescription");
+  const overviewPanel = document.getElementById("overviewPanel");
   const sliders = document.getElementById("sliderPanel");
   const metrics = document.getElementById("metricPanel");
   const askForm = document.getElementById("askForm");
@@ -33,7 +35,9 @@
   if (!model) {
     document.title = "模型不存在 - AI数学学习产品V4";
     title.textContent = "模型不存在";
+    metaLine.textContent = "";
     description.textContent = "请返回首页选择一个已配置的数学模型。";
+    overviewPanel.innerHTML = "";
     sliders.innerHTML = "";
     metrics.innerHTML = "";
     askForm.hidden = true;
@@ -53,8 +57,9 @@
     return;
   }
 
-  document.title = `${model.name} - AI数学学习产品V4`;
-  title.textContent = model.name;
+  document.title = `${model.title} - AI数学学习产品V4`;
+  title.textContent = model.title;
+  metaLine.textContent = `${model.grade} · ${model.domain}`;
   description.textContent = model.description;
 
   function svgEl(name, attrs = {}, text = "") {
@@ -106,7 +111,7 @@
       svg.appendChild(svgEl("circle", { cx, cy, r: 4, class: "point-dot pulse" }));
       svg.appendChild(svgEl("circle", { cx: cx + r, cy, r: 5, class: "point-dot" }));
       addText(`r = ${round(state.radius)}`, cx + r / 2 - 14, cy - 10);
-      addText(model.name, 220, 45, "svg-title");
+      addText(model.title, 220, 45, "svg-title");
     },
 
     triangle() {
@@ -127,7 +132,7 @@
       svg.appendChild(svgEl("circle", { cx: apexX, cy: apexY, r: 5, class: "point-dot pulse" }));
       addText(`b = ${round(state.base)}`, 220, y + 42);
       addText(`h = ${round(state.height)}`, apexX + 10, apexY + height / 2);
-      addText(model.name, 205, 45, "svg-title");
+      addText(model.title, 205, 45, "svg-title");
     },
 
     parabola() {
@@ -149,7 +154,7 @@
       svg.appendChild(svgEl("line", { x1: sx(state.h), y1: 40, x2: sx(state.h), y2: 320, class: "measure-line dashed" }));
       svg.appendChild(svgEl("circle", { cx: sx(state.h), cy: sy(state.k), r: 6, class: "point-dot pulse" }));
       addText(`顶点 (${round(state.h)}, ${round(state.k)})`, sx(state.h) + 12, sy(state.k) - 12);
-      addText(model.name, 205, 32, "svg-title");
+      addText(model.title, 205, 32, "svg-title");
     },
 
     sector() {
@@ -169,33 +174,75 @@
       svg.appendChild(svgEl("circle", { cx, cy, r: 5, class: "point-dot pulse" }));
       addText(`θ = ${round(state.angle)}°`, cx + 16, cy - 20);
       addText(`r = ${round(state.radius)}`, (cx + start.x) / 2 + 8, (cy + start.y) / 2);
-      addText(model.name, 222, 45, "svg-title");
+      addText(model.title, 222, 45, "svg-title");
     }
   };
 
   function renderSvg() {
     const renderer = visualRenderers[model.visual];
     if (renderer) {
+      svg.removeAttribute("hidden");
       renderer();
       return;
     }
 
-    clearSvg();
-    addText("暂未配置图形渲染器", 150, 180, "svg-title");
+    svg.setAttribute("hidden", "");
+  }
+
+  function createInfoItem(label, value) {
+    const item = document.createElement("div");
+    item.className = "metric-item";
+    item.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
+    return item;
+  }
+
+  function createList(items, className = "detail-list") {
+    const list = document.createElement("ul");
+    list.className = className;
+    items.forEach((text) => {
+      const item = document.createElement("li");
+      item.textContent = text;
+      list.appendChild(item);
+    });
+    return list;
+  }
+
+  function renderOverview() {
+    overviewPanel.replaceChildren();
+    overviewPanel.appendChild(createInfoItem("所属年级", model.grade));
+    overviewPanel.appendChild(createInfoItem("所属领域", model.domain));
+    overviewPanel.appendChild(createInfoItem("难度", model.difficulty || "基础"));
+
+    const tagWrap = document.createElement("div");
+    tagWrap.className = "tag-row detail-tags";
+    model.tags.forEach((tag) => {
+      const item = document.createElement("span");
+      item.textContent = tag;
+      tagWrap.appendChild(item);
+    });
+    overviewPanel.appendChild(tagWrap);
   }
 
   function renderMetrics() {
-    const modelMetrics = model.metrics(state);
     metrics.replaceChildren();
-    Object.entries(modelMetrics).forEach(([label, value]) => {
-      const item = document.createElement("div");
-      item.className = "metric-item";
-      item.innerHTML = `<span>${label}</span><strong>${value}</strong>`;
-      metrics.appendChild(item);
-    });
+
+    if (typeof model.metrics === "function") {
+      Object.entries(model.metrics(state)).forEach(([label, value]) => {
+        metrics.appendChild(createInfoItem(label, value));
+      });
+    }
+
+    if (Array.isArray(model.examples) && model.examples.length > 0) {
+      const exampleBlock = document.createElement("div");
+      exampleBlock.className = "formula-block";
+      exampleBlock.innerHTML = "<h3>典型例题</h3>";
+      exampleBlock.appendChild(createList(model.examples));
+      metrics.appendChild(exampleBlock);
+    }
   }
 
   function renderAll() {
+    renderOverview();
     renderSvg();
     renderMetrics();
   }
@@ -203,7 +250,23 @@
   function buildSliders() {
     sliders.replaceChildren();
 
-    model.params.forEach((param) => {
+    if (Array.isArray(model.formula) && model.formula.length > 0) {
+      const formulaBlock = document.createElement("div");
+      formulaBlock.className = "formula-block";
+      formulaBlock.innerHTML = "<h3>核心公式或规则</h3>";
+      formulaBlock.appendChild(createList(model.formula));
+      sliders.appendChild(formulaBlock);
+    }
+
+    const params = Array.isArray(model.params) ? model.params : [];
+    if (params.length > 0) {
+      const sliderTitle = document.createElement("h3");
+      sliderTitle.className = "control-subtitle";
+      sliderTitle.textContent = "可调参数";
+      sliders.appendChild(sliderTitle);
+    }
+
+    params.forEach((param) => {
       state[param.key] = param.value;
 
       const control = document.createElement("label");
@@ -330,7 +393,10 @@
       body: JSON.stringify({
         intent: options.intent,
         modelId: model.id,
-        modelName: model.name,
+        modelName: model.title,
+        modelGrade: model.grade,
+        modelDomain: model.domain,
+        formula: model.formula,
         question,
         parameters: state
       })
@@ -414,6 +480,8 @@
   }
 
   function buildGeneratedQuestion() {
+    return registry.generateQuestion(model.id, state);
+
     const units = ["厘米", "米", "毫米"];
     const unit = choice(units);
     const askAreaText = [
@@ -616,7 +684,13 @@
     }
 
     if (Number.isFinite(question.answerValue)) {
-      return numbers.some((value) => Math.abs(value - question.answerValue) <= tolerance);
+      if (numbers.some((value) => Math.abs(value - question.answerValue) <= tolerance)) {
+        return true;
+      }
+
+      if (numbers.length >= 2 && numbers[1] !== 0) {
+        return Math.abs(numbers[0] / numbers[1] - question.answerValue) <= tolerance;
+      }
     }
 
     return false;

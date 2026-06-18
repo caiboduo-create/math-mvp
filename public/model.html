@@ -26,16 +26,42 @@
           <p id="modelDescription"></p>
         </div>
         <div class="overview-panel" id="overviewPanel"></div>
-        <svg id="modelSvg" class="model-svg" role="img" aria-label="模型动态图"></svg>
       </section>
 
-      <section class="card controls-card">
-        <div class="card-heading">
-          <h2>核心公式与例题</h2>
-        </div>
-        <div id="sliderPanel" class="slider-panel"></div>
-        <div id="metricPanel" class="metric-panel"></div>
-      </section>
+      <div class="side-stack">
+        <section class="card controls-card">
+          <div class="card-heading">
+            <h2>核心公式与例题</h2>
+          </div>
+          <div id="sliderPanel" class="slider-panel"></div>
+          <div id="metricPanel" class="metric-panel"></div>
+        </section>
+
+        <section class="card stats-card">
+          <div class="card-heading">
+            <h2>答题统计</h2>
+          </div>
+          <div class="stats-panel" aria-live="polite">
+            <div class="stat-item">
+              <span>总答题</span>
+              <strong id="statTotal">0</strong>
+            </div>
+            <div class="stat-item">
+              <span>答对</span>
+              <strong id="statCorrect">0</strong>
+            </div>
+            <div class="stat-item">
+              <span>答错</span>
+              <strong id="statWrong">0</strong>
+            </div>
+            <div class="stat-item">
+              <span>正确率</span>
+              <strong id="statRate">0%</strong>
+            </div>
+          </div>
+          <button class="secondary-button" id="resetStatsButton" type="button">重置统计</button>
+        </section>
+      </div>
 
       <section class="card interactive-card" id="interactive-section">
         <div class="card-heading">
@@ -44,31 +70,6 @@
         </div>
         <div id="interactive-container" class="interactive-container"></div>
         <div id="interactive-fallback" class="content-box muted-box" hidden></div>
-      </section>
-
-      <section class="card stats-card">
-        <div class="card-heading">
-          <h2>答题统计</h2>
-        </div>
-        <div class="stats-panel" aria-live="polite">
-          <div class="stat-item">
-            <span>总答题</span>
-            <strong id="statTotal">0</strong>
-          </div>
-          <div class="stat-item">
-            <span>答对</span>
-            <strong id="statCorrect">0</strong>
-          </div>
-          <div class="stat-item">
-            <span>答错</span>
-            <strong id="statWrong">0</strong>
-          </div>
-          <div class="stat-item">
-            <span>正确率</span>
-            <strong id="statRate">0%</strong>
-          </div>
-        </div>
-        <button class="secondary-button" id="resetStatsButton" type="button">重置统计</button>
       </section>
 
       <section class="card practice-card">

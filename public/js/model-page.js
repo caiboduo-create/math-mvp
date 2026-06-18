@@ -1,5 +1,4 @@
 (function () {
-  const svgNs = "http://www.w3.org/2000/svg";
   const searchParams = new URLSearchParams(window.location.search);
   const modelId = searchParams.get("id");
   const registry = window.MathCoursewareModels;
@@ -23,7 +22,6 @@
   const askForm = document.getElementById("askForm");
   const askInput = document.getElementById("askInput");
   const askResult = document.getElementById("askResult");
-  const svg = document.getElementById("modelSvg");
   const mistakeCount = document.getElementById("mistakeCount");
   const generateProblemButton = document.getElementById("generateProblemButton");
   const aiProblemBox = document.getElementById("aiProblemBox");
@@ -67,133 +65,6 @@
   title.textContent = model.title;
   metaLine.textContent = `${model.grade} · ${model.domain}`;
   description.textContent = model.description;
-
-  function svgEl(name, attrs = {}, text = "") {
-    const el = document.createElementNS(svgNs, name);
-    Object.entries(attrs).forEach(([key, value]) => el.setAttribute(key, value));
-    if (text) {
-      el.textContent = text;
-    }
-    return el;
-  }
-
-  function clearSvg() {
-    svg.setAttribute("viewBox", "0 0 480 360");
-    svg.replaceChildren();
-  }
-
-  function addText(text, x, y, className = "svg-label") {
-    svg.appendChild(svgEl("text", { x, y, class: className }, text));
-  }
-
-  function addGrid() {
-    for (let x = 60; x <= 420; x += 40) {
-      svg.appendChild(svgEl("line", { x1: x, y1: 40, x2: x, y2: 320, class: "grid-line" }));
-    }
-    for (let y = 40; y <= 320; y += 40) {
-      svg.appendChild(svgEl("line", { x1: 60, y1: y, x2: 420, y2: y, class: "grid-line" }));
-    }
-    svg.appendChild(svgEl("line", { x1: 60, y1: 180, x2: 420, y2: 180, class: "axis-line" }));
-    svg.appendChild(svgEl("line", { x1: 240, y1: 40, x2: 240, y2: 320, class: "axis-line" }));
-  }
-
-  function polar(cx, cy, r, angleDeg) {
-    const angle = ((angleDeg - 90) * Math.PI) / 180;
-    return {
-      x: cx + r * Math.cos(angle),
-      y: cy + r * Math.sin(angle)
-    };
-  }
-
-  const visualRenderers = {
-    circle() {
-      clearSvg();
-      const r = state.radius * 14;
-      const cx = 240;
-      const cy = 180;
-      svg.appendChild(svgEl("circle", { cx, cy, r, class: "shape-fill" }));
-      svg.appendChild(svgEl("circle", { cx, cy, r, class: "shape-outline" }));
-      svg.appendChild(svgEl("line", { x1: cx, y1: cy, x2: cx + r, y2: cy, class: "measure-line" }));
-      svg.appendChild(svgEl("circle", { cx, cy, r: 4, class: "point-dot pulse" }));
-      svg.appendChild(svgEl("circle", { cx: cx + r, cy, r: 5, class: "point-dot" }));
-      addText(`r = ${round(state.radius)}`, cx + r / 2 - 14, cy - 10);
-      addText(model.title, 220, 45, "svg-title");
-    },
-
-    triangle() {
-      clearSvg();
-      const base = state.base * 28;
-      const height = state.height * 24;
-      const shift = state.shift * 22;
-      const y = 292;
-      const x1 = 240 - base / 2;
-      const x2 = 240 + base / 2;
-      const apexX = 240 + shift;
-      const apexY = y - height;
-      const points = `${x1},${y} ${x2},${y} ${apexX},${apexY}`;
-      svg.appendChild(svgEl("polygon", { points, class: "shape-fill" }));
-      svg.appendChild(svgEl("polygon", { points, class: "shape-outline" }));
-      svg.appendChild(svgEl("line", { x1: apexX, y1: apexY, x2: apexX, y2: y, class: "measure-line dashed" }));
-      svg.appendChild(svgEl("line", { x1, y1: y + 16, x2, y2: y + 16, class: "measure-line" }));
-      svg.appendChild(svgEl("circle", { cx: apexX, cy: apexY, r: 5, class: "point-dot pulse" }));
-      addText(`b = ${round(state.base)}`, 220, y + 42);
-      addText(`h = ${round(state.height)}`, apexX + 10, apexY + height / 2);
-      addText(model.title, 205, 45, "svg-title");
-    },
-
-    parabola() {
-      clearSvg();
-      addGrid();
-
-      const sx = (x) => 240 + x * 18;
-      const sy = (y) => 180 - y * 18;
-      let path = "";
-
-      for (let x = -10; x <= 10; x += 0.25) {
-        const y = state.a * Math.pow(x - state.h, 2) + state.k;
-        const px = sx(x);
-        const py = Math.max(24, Math.min(336, sy(y)));
-        path += path ? ` L ${px} ${py}` : `M ${px} ${py}`;
-      }
-
-      svg.appendChild(svgEl("path", { d: path, class: "curve-line" }));
-      svg.appendChild(svgEl("line", { x1: sx(state.h), y1: 40, x2: sx(state.h), y2: 320, class: "measure-line dashed" }));
-      svg.appendChild(svgEl("circle", { cx: sx(state.h), cy: sy(state.k), r: 6, class: "point-dot pulse" }));
-      addText(`顶点 (${round(state.h)}, ${round(state.k)})`, sx(state.h) + 12, sy(state.k) - 12);
-      addText(model.title, 205, 32, "svg-title");
-    },
-
-    sector() {
-      clearSvg();
-      const cx = 240;
-      const cy = 194;
-      const r = state.radius * 15;
-      const start = polar(cx, cy, r, 0);
-      const end = polar(cx, cy, r, state.angle);
-      const largeArc = state.angle > 180 ? 1 : 0;
-      const d = `M ${cx} ${cy} L ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 1 ${end.x} ${end.y} Z`;
-
-      svg.appendChild(svgEl("path", { d, class: "shape-fill" }));
-      svg.appendChild(svgEl("path", { d, class: "shape-outline" }));
-      svg.appendChild(svgEl("line", { x1: cx, y1: cy, x2: start.x, y2: start.y, class: "measure-line" }));
-      svg.appendChild(svgEl("line", { x1: cx, y1: cy, x2: end.x, y2: end.y, class: "measure-line" }));
-      svg.appendChild(svgEl("circle", { cx, cy, r: 5, class: "point-dot pulse" }));
-      addText(`θ = ${round(state.angle)}°`, cx + 16, cy - 20);
-      addText(`r = ${round(state.radius)}`, (cx + start.x) / 2 + 8, (cy + start.y) / 2);
-      addText(model.title, 222, 45, "svg-title");
-    }
-  };
-
-  function renderSvg() {
-    const renderer = visualRenderers[model.visual];
-    if (renderer) {
-      svg.removeAttribute("hidden");
-      renderer();
-      return;
-    }
-
-    svg.setAttribute("hidden", "");
-  }
 
   function createInfoItem(label, value) {
     const item = document.createElement("div");
@@ -249,12 +120,16 @@
 
   function renderAll() {
     renderOverview();
-    renderSvg();
     renderMetrics();
   }
 
   function buildSliders() {
     sliders.replaceChildren();
+    const params = Array.isArray(model.params) ? model.params : [];
+
+    params.forEach((param) => {
+      state[param.key] = param.value;
+    });
 
     if (Array.isArray(model.formula) && model.formula.length > 0) {
       const formulaBlock = document.createElement("div");
@@ -263,39 +138,6 @@
       formulaBlock.appendChild(createList(model.formula));
       sliders.appendChild(formulaBlock);
     }
-
-    const params = Array.isArray(model.params) ? model.params : [];
-    if (params.length > 0) {
-      const sliderTitle = document.createElement("h3");
-      sliderTitle.className = "control-subtitle";
-      sliderTitle.textContent = "可调参数";
-      sliders.appendChild(sliderTitle);
-    }
-
-    params.forEach((param) => {
-      state[param.key] = param.value;
-
-      const control = document.createElement("label");
-      control.className = "slider-control";
-      control.innerHTML = `
-        <span class="slider-label">
-          <span>${param.label}</span>
-          <strong id="${param.key}Value">${round(param.value)}${param.unit || ""}</strong>
-        </span>
-        <input type="range" min="${param.min}" max="${param.max}" step="${param.step}" value="${param.value}" data-key="${param.key}" />
-      `;
-
-      const input = control.querySelector("input");
-      const value = control.querySelector("strong");
-
-      input.addEventListener("input", () => {
-        state[param.key] = Number(input.value);
-        value.textContent = `${round(state[param.key])}${param.unit || ""}`;
-        renderAll();
-      });
-
-      sliders.appendChild(control);
-    });
   }
 
   function runGeoGebraCommands(api, commands) {
@@ -431,6 +273,7 @@
 
   function showInteractiveFallback(message) {
     interactiveContainer.replaceChildren();
+    interactiveContainer.className = "interactive-container";
     interactiveContainer.hidden = true;
     interactiveFallback.hidden = false;
     interactiveFallback.replaceChildren();
@@ -456,15 +299,17 @@
     interactiveFallback.hidden = true;
     interactiveFallback.replaceChildren();
     interactiveContainer.replaceChildren();
-    interactiveContainer.style.minHeight = `${geoConfig.height || 420}px`;
+    interactiveContainer.className = "interactive-container is-geogebra";
+    const geogebraHeight = Math.min(430, Math.max(360, Number(geoConfig.height) || 400));
+    interactiveContainer.style.minHeight = `${geogebraHeight}px`;
 
     if (geoConfig.embedType === "iframe" && geoConfig.materialId) {
       const iframe = document.createElement("iframe");
       iframe.title = `${model.title} GeoGebra 互动图示`;
       iframe.loading = "lazy";
       iframe.allowFullscreen = true;
-      iframe.height = String(geoConfig.height || 420);
-      iframe.src = `https://www.geogebra.org/material/iframe/id/${encodeURIComponent(geoConfig.materialId)}/width/900/height/${geoConfig.height || 420}/border/888/sfsb/true/smb/false/stb/false/stbh/false/ai/false/asb/false/sri/true/rc/false/ld/false/sdz/true/ctl/false`;
+      iframe.height = String(geogebraHeight);
+      iframe.src = `https://www.geogebra.org/material/iframe/id/${encodeURIComponent(geoConfig.materialId)}/width/900/height/${geogebraHeight}/border/888/sfsb/true/smb/false/stb/false/stbh/false/ai/false/asb/false/sri/true/rc/false/ld/false/sdz/true/ctl/false`;
       interactiveContainer.appendChild(iframe);
       return;
     }
@@ -479,7 +324,7 @@
       id: appletId,
       appName: geoConfig.appName || "geometry",
       width: interactiveContainer.clientWidth || 900,
-      height: geoConfig.height || 420,
+      height: geogebraHeight,
       showToolBar: false,
       showAlgebraInput: false,
       showMenuBar: false,
@@ -510,6 +355,7 @@
     interactiveFallback.hidden = true;
     interactiveFallback.replaceChildren();
     interactiveContainer.replaceChildren();
+    interactiveContainer.className = "interactive-container is-custom";
     interactiveContainer.style.minHeight = "";
 
     if (!window.CustomInteractives || typeof window.CustomInteractives.renderCustomInteractive !== "function") {
@@ -533,22 +379,31 @@
       title: "互动探索",
       description: "拖动参数，观察变化。"
     };
+    const hasGeoGebra = Boolean(model.geoGebra && model.geoGebra.enabled);
+    const effectiveConfig = hasGeoGebra
+      ? {
+          ...config,
+          enabled: true,
+          type: "geogebra",
+          description: model.geoGebra.description || config.description
+        }
+      : config;
 
-    interactiveTitle.textContent = config.title || "互动探索";
-    interactiveDescription.textContent = config.description || "拖动参数，观察变化。";
+    interactiveTitle.textContent = effectiveConfig.title || "互动探索";
+    interactiveDescription.textContent = effectiveConfig.description || "拖动参数，观察变化。";
 
-    if (!config.enabled) {
+    if (!effectiveConfig.enabled) {
       showInteractiveFallback("这个知识点的互动组件正在设计中。");
       return;
     }
 
-    if (config.type === "geogebra") {
-      renderGeoGebra(config);
+    if (hasGeoGebra || effectiveConfig.type === "geogebra") {
+      renderGeoGebra(effectiveConfig);
       return;
     }
 
-    if (config.type === "custom") {
-      renderCustomInteractive(config);
+    if (effectiveConfig.type === "custom") {
+      renderCustomInteractive(effectiveConfig);
       return;
     }
 

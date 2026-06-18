@@ -257,12 +257,12 @@ h2 {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.75fr);
   grid-template-areas:
-    "visual controls"
-    "visual stats"
+    "visual side"
     "interactive interactive"
     "practice practice"
     "result result"
     "ask ask";
+  align-items: start;
   gap: 16px;
 }
 
@@ -274,12 +274,11 @@ h2 {
   grid-area: visual;
 }
 
-.controls-card {
-  grid-area: controls;
-}
-
-.stats-card {
-  grid-area: stats;
+.side-stack {
+  display: grid;
+  grid-area: side;
+  align-content: start;
+  gap: 16px;
 }
 
 .practice-card {
@@ -310,26 +309,21 @@ h2 {
   line-height: 1.6;
 }
 
-.model-svg {
-  display: block;
-  width: 100%;
-  min-height: 360px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: #f8fbff;
-}
-
-.model-svg[hidden] {
-  display: none;
-}
-
 .interactive-container {
   width: 100%;
-  min-height: 420px;
+  min-height: 0;
   overflow: hidden;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
+}
+
+.interactive-container.is-geogebra {
+  min-height: 390px;
+}
+
+.interactive-container.is-custom {
+  min-height: 0;
 }
 
 .interactive-container[hidden] {
@@ -350,8 +344,8 @@ h2 {
 
 .custom-interactive {
   display: grid;
-  gap: 14px;
-  padding: 14px;
+  gap: 10px;
+  padding: 10px;
 }
 
 .custom-interactive-layout {
@@ -373,7 +367,7 @@ h2 {
 
 .custom-stage {
   position: relative;
-  min-height: 280px;
+  min-height: 220px;
   padding: 12px;
   overflow: hidden;
 }
@@ -394,8 +388,8 @@ h2 {
 .custom-controls {
   display: grid;
   align-content: start;
-  gap: 12px;
-  padding: 14px;
+  gap: 10px;
+  padding: 12px;
 }
 
 .custom-slider {
@@ -423,7 +417,7 @@ h2 {
 .custom-result,
 .observation-tip,
 .interactive-placeholder {
-  padding: 13px 14px;
+  padding: 10px 12px;
   color: var(--ink);
   line-height: 1.7;
 }
@@ -457,7 +451,7 @@ h2 {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 250px;
+  min-height: 205px;
 }
 
 .axis-arrow,
@@ -528,7 +522,7 @@ h2 {
 
 .tile-board {
   display: flex;
-  min-height: 230px;
+  min-height: 205px;
   align-content: center;
   align-items: center;
   flex-wrap: wrap;
@@ -570,7 +564,7 @@ h2 {
 
 .fraction-bars {
   display: flex;
-  min-height: 220px;
+  min-height: 200px;
   align-items: center;
   gap: 6px;
   padding: 48px 22px 16px;
@@ -602,7 +596,7 @@ h2 {
 
 .bar-chart {
   display: flex;
-  min-height: 236px;
+  min-height: 210px;
   align-items: end;
   gap: 10px;
   justify-content: center;
@@ -624,7 +618,7 @@ h2 {
 
 .ball-bag {
   display: flex;
-  min-height: 230px;
+  min-height: 205px;
   align-content: center;
   align-items: center;
   flex-wrap: wrap;
@@ -1068,21 +1062,13 @@ a:focus-visible {
     grid-template-columns: 1fr;
     grid-template-areas:
       "visual"
-      "controls"
-      "stats"
+      "side"
       "interactive"
       "practice"
       "result"
       "ask";
   }
 
-  .custom-interactive-layout {
-    grid-template-columns: 1fr;
-  }
-
-  .custom-stage {
-    min-height: 250px;
-  }
 }
 
 @media (max-width: 620px) {
@@ -1109,21 +1095,17 @@ a:focus-visible {
     grid-template-columns: 1fr;
   }
 
-  .model-svg {
-    min-height: 300px;
-  }
-
   .custom-interactive {
     padding: 10px;
   }
 
   .custom-stage {
-    min-height: 230px;
+    min-height: 210px;
     padding: 10px;
   }
 
   .custom-svg {
-    min-height: 220px;
+    min-height: 200px;
   }
 
   .observation-tip {
@@ -1139,5 +1121,11 @@ a:focus-visible {
   .balance-beam {
     width: 100%;
     height: 8px;
+  }
+}
+
+@media (max-width: 520px) {
+  .custom-interactive-layout {
+    grid-template-columns: 1fr;
   }
 }

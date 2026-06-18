@@ -288,7 +288,6 @@ h2 {
   padding: 18px;
 }
 
-.visual-card,
 .interactive-card,
 .controls-card,
 .stats-card,
@@ -1731,32 +1730,28 @@ a:focus-visible {
     line-height: 1.55;
   }
 
-  .visual-card {
+  .interactive-card {
     order: 1;
   }
 
-  .interactive-card {
+  .practice-card {
     order: 2;
   }
 
-  .practice-card {
+  .result-card {
     order: 3;
   }
 
-  .result-card {
+  .ask-card {
     order: 4;
   }
 
-  .ask-card {
+  .controls-card {
     order: 5;
   }
 
-  .controls-card {
-    order: 6;
-  }
-
   .stats-card {
-    order: 7;
+    order: 6;
   }
 
   .desktop-formula-heading {
@@ -1991,32 +1986,28 @@ a:focus-visible {
     display: contents;
   }
 
-  .visual-card {
+  .interactive-card {
     order: 1;
   }
 
-  .controls-card {
+  .practice-card {
     order: 2;
   }
 
-  .interactive-card {
+  .result-card {
     order: 3;
   }
 
-  .practice-card {
+  .ask-card {
     order: 4;
   }
 
-  .result-card {
+  .controls-card {
     order: 5;
   }
 
-  .ask-card {
-    order: 6;
-  }
-
   .stats-card {
-    order: 7;
+    order: 6;
   }
 
   .stats-footer-row {
@@ -2109,32 +2100,28 @@ a:focus-visible {
 }
 
 @media (max-width: 768px) {
-  .visual-card {
+  .interactive-card {
     order: 1;
   }
 
-  .interactive-card {
+  .practice-card {
     order: 2;
   }
 
-  .practice-card {
+  .result-card {
     order: 3;
   }
 
-  .result-card {
+  .ask-card {
     order: 4;
   }
 
-  .ask-card {
+  .controls-card {
     order: 5;
   }
 
-  .controls-card {
-    order: 6;
-  }
-
   .stats-card {
-    order: 7;
+    order: 6;
   }
 
   .custom-interactive-layout {

@@ -10,7 +10,6 @@
 
   const title = document.getElementById("modelTitle");
   const metaLine = document.getElementById("modelMetaLine");
-  const description = document.getElementById("modelDescription");
   const interactiveSection = document.getElementById("interactive-section");
   const interactiveTitle = document.getElementById("interactive-title");
   const interactiveDescription = document.getElementById("interactive-description");
@@ -42,7 +41,6 @@
     document.title = "模型不存在 - AI数学学习产品V4";
     title.textContent = "模型不存在";
     metaLine.textContent = "";
-    description.textContent = "请返回首页选择一个已配置的数学模型。";
     sliders.innerHTML = "";
     metrics.innerHTML = "";
     askForm.hidden = true;
@@ -66,7 +64,6 @@
   document.title = `${model.title} - AI数学学习产品V4`;
   title.textContent = model.title;
   metaLine.textContent = `${model.grade} · ${model.domain}`;
-  description.textContent = model.description;
 
   function setFormulaExpanded(expanded) {
     formulaContent.hidden = !expanded;

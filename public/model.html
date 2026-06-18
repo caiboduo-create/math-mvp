@@ -27,7 +27,6 @@
               <h2>知识点概览</h2>
               <p id="modelDescription"></p>
             </div>
-            <div class="overview-panel" id="overviewPanel"></div>
           </section>
 
           <section class="card interactive-card" id="interactive-section">
@@ -49,30 +48,6 @@
           <div id="metricPanel" class="metric-panel"></div>
         </section>
 
-        <section class="card stats-card">
-          <div class="card-heading">
-            <h2>答题统计</h2>
-          </div>
-          <div class="stats-panel" aria-live="polite">
-            <div class="stat-item">
-              <span>总答题</span>
-              <strong id="statTotal">0</strong>
-            </div>
-            <div class="stat-item">
-              <span>答对</span>
-              <strong id="statCorrect">0</strong>
-            </div>
-            <div class="stat-item">
-              <span>答错</span>
-              <strong id="statWrong">0</strong>
-            </div>
-            <div class="stat-item">
-              <span>正确率</span>
-              <strong id="statRate">0%</strong>
-            </div>
-          </div>
-          <button class="secondary-button" id="resetStatsButton" type="button">重置统计</button>
-        </section>
         </aside>
       </div>
 
@@ -108,6 +83,33 @@
           <button class="primary-button" type="submit">发送问题</button>
         </form>
         <div id="askResult" class="answer-box" hidden></div>
+      </section>
+
+      <section class="card stats-card">
+        <div class="card-heading">
+          <h2>答题统计</h2>
+        </div>
+        <div class="stats-footer-row">
+          <div class="stats-panel" aria-live="polite">
+            <div class="stat-item">
+              <span>总答题</span>
+              <strong id="statTotal">0</strong>
+            </div>
+            <div class="stat-item">
+              <span>答对</span>
+              <strong id="statCorrect">0</strong>
+            </div>
+            <div class="stat-item">
+              <span>答错</span>
+              <strong id="statWrong">0</strong>
+            </div>
+            <div class="stat-item">
+              <span>正确率</span>
+              <strong id="statRate">0%</strong>
+            </div>
+          </div>
+          <button class="secondary-button" id="resetStatsButton" type="button">重置统计</button>
+        </div>
       </section>
     </main>
 

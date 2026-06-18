@@ -11,7 +11,6 @@
   const title = document.getElementById("modelTitle");
   const metaLine = document.getElementById("modelMetaLine");
   const description = document.getElementById("modelDescription");
-  const overviewPanel = document.getElementById("overviewPanel");
   const interactiveSection = document.getElementById("interactive-section");
   const interactiveTitle = document.getElementById("interactive-title");
   const interactiveDescription = document.getElementById("interactive-description");
@@ -40,7 +39,6 @@
     title.textContent = "模型不存在";
     metaLine.textContent = "";
     description.textContent = "请返回首页选择一个已配置的数学模型。";
-    overviewPanel.innerHTML = "";
     sliders.innerHTML = "";
     metrics.innerHTML = "";
     askForm.hidden = true;
@@ -84,22 +82,6 @@
     return list;
   }
 
-  function renderOverview() {
-    overviewPanel.replaceChildren();
-    overviewPanel.appendChild(createInfoItem("所属年级", model.grade));
-    overviewPanel.appendChild(createInfoItem("所属领域", model.domain));
-    overviewPanel.appendChild(createInfoItem("难度", model.difficulty || "基础"));
-
-    const tagWrap = document.createElement("div");
-    tagWrap.className = "tag-row detail-tags";
-    model.tags.forEach((tag) => {
-      const item = document.createElement("span");
-      item.textContent = tag;
-      tagWrap.appendChild(item);
-    });
-    overviewPanel.appendChild(tagWrap);
-  }
-
   function renderMetrics() {
     metrics.replaceChildren();
 
@@ -119,7 +101,6 @@
   }
 
   function renderAll() {
-    renderOverview();
     renderMetrics();
   }
 

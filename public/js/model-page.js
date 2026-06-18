@@ -221,12 +221,13 @@
         "a = Slider[-3, 3, 0.1, 1, 150, false, true, false, false]",
         "b = Slider[-6, 6, 0.1, 1, 150, false, true, false, false]",
         "c = Slider[-6, 6, 0.1, 1, 150, false, true, false, false]",
+        "SetValue[a, 1]",
         "SetCoords[a, -5, 4.8]",
         "SetCoords[b, -5, 4.2]",
         "SetCoords[c, -5, 3.6]",
         "f(x) = a * x^2 + b * x + c",
         "V = Extremum[f]",
-        "axis: x = -b / (2a)",
+        "axisLine: x = -b / (2a)",
         "Text[\"拖动 a、b、c，观察抛物线\", (-5, 5.2)]",
         "Text[\"对称轴 x = -b / 2a\", (-5, -4.8)]"
       ]);
@@ -243,10 +244,8 @@
     "pythagorean-theorem"(api) {
       runGeoGebraCommands(api, [
         "A = (0, 0)",
-        "B = Point[xAxis]",
-        "C = Point[yAxis]",
-        "SetCoords[B, 4, 0]",
-        "SetCoords[C, 0, 3]",
+        "B = (4, 0)",
+        "C = (0, 3)",
         "tri = Polygon[A, B, C]",
         "a = Distance[A, C]",
         "b = Distance[A, B]",
@@ -273,7 +272,7 @@
     }
   };
 
-  function showInteractiveFallback(message) {
+  function showInteractiveFallback(message, onRetry) {
     interactiveContainer.replaceChildren();
     interactiveContainer.className = "interactive-container";
     interactiveContainer.hidden = true;
@@ -282,10 +281,21 @@
 
     const fallback = document.createElement("div");
     fallback.className = "interactive-placeholder";
-    fallback.innerHTML = `
-      <strong>互动内容准备中</strong>
-      <span>${message}</span>
-    `;
+    const heading = document.createElement("strong");
+    heading.textContent = onRetry ? "互动图加载失败" : "互动内容准备中";
+    const text = document.createElement("span");
+    text.textContent = message;
+    fallback.append(heading, text);
+
+    if (typeof onRetry === "function") {
+      const retryButton = document.createElement("button");
+      retryButton.className = "secondary-button geogebra-retry-button";
+      retryButton.type = "button";
+      retryButton.textContent = "重新加载";
+      retryButton.addEventListener("click", onRetry);
+      fallback.appendChild(retryButton);
+    }
+
     interactiveFallback.appendChild(fallback);
   }
 
@@ -308,6 +318,14 @@
       ? Math.min(340, Math.max(300, configuredHeight || 320))
       : Math.min(430, Math.max(380, configuredHeight || 400));
     interactiveContainer.style.minHeight = `${geogebraHeight}px`;
+    interactiveContainer.style.height = `${geogebraHeight}px`;
+
+    let geogebraLoaded = false;
+    const failTimer = window.setTimeout(() => {
+      if (!geogebraLoaded) {
+        showInteractiveFallback("互动图加载失败，点击重新加载。", () => renderGeoGebra(config));
+      }
+    }, 8000);
 
     if (geoConfig.embedType === "iframe" && geoConfig.materialId) {
       const iframe = document.createElement("iframe");
@@ -316,11 +334,16 @@
       iframe.allowFullscreen = true;
       iframe.height = String(geogebraHeight);
       iframe.src = `https://www.geogebra.org/material/iframe/id/${encodeURIComponent(geoConfig.materialId)}/width/900/height/${geogebraHeight}/border/888/sfsb/true/smb/false/stb/false/stbh/false/ai/false/asb/false/sri/true/rc/false/ld/false/sdz/true/ctl/false`;
+      iframe.addEventListener("load", () => {
+        geogebraLoaded = true;
+        window.clearTimeout(failTimer);
+      });
       interactiveContainer.appendChild(iframe);
       return;
     }
 
     if (typeof window.GGBApplet !== "function") {
+      window.clearTimeout(failTimer);
       showInteractiveFallback("GeoGebra 暂时无法加载，请稍后刷新页面。");
       return;
     }
@@ -335,16 +358,28 @@
       showAlgebraInput: false,
       showMenuBar: false,
       showResetIcon: true,
+      showAlgebraView: false,
       enableLabelDrags: false,
       enableShiftDragZoom: true,
+      enableRightClick: false,
       useBrowserForJS: true,
+      perspective: "G",
       borderColor: "#cfe0f5",
       scaleContainerClass: "interactive-container",
       appletOnLoad(api) {
+        geogebraLoaded = true;
+        window.clearTimeout(failTimer);
         const construction = geoGebraConstructions[geoConfig.construction || model.id];
         if (construction) {
           construction(api);
         }
+        window.setTimeout(() => {
+          try {
+            api.setSize(interactiveContainer.clientWidth || 900, geogebraHeight);
+          } catch (error) {
+            console.warn("GeoGebra resize failed:", error);
+          }
+        }, 80);
       }
     };
 
@@ -352,7 +387,8 @@
       const applet = new window.GGBApplet(params, true);
       applet.inject("interactive-container");
     } catch (error) {
-      showInteractiveFallback("GeoGebra 互动图示加载失败，请稍后重试。");
+      window.clearTimeout(failTimer);
+      showInteractiveFallback("互动图加载失败，点击重新加载。", () => renderGeoGebra(config));
     }
   }
 
@@ -774,35 +810,165 @@
     };
   }
 
+  function normalizeQuestionShape(problem, fallbackProblem) {
+    const source = problem && typeof problem === "object" ? problem : fallbackProblem;
+    if (!source || typeof source.question !== "string" || typeof source.answer !== "string") {
+      return fallbackProblem;
+    }
+
+    const answerValue =
+      source.answerValue === "" || source.answerValue === null || source.answerValue === undefined
+        ? undefined
+        : Number.isFinite(Number(source.answerValue))
+          ? Number(source.answerValue)
+          : source.answerValue;
+
+    return {
+      ...fallbackProblem,
+      ...source,
+      question: source.question.trim(),
+      answer: source.answer.trim(),
+      answerValue,
+      aliases: Array.isArray(source.aliases)
+        ? source.aliases.filter(Boolean)
+        : Array.isArray(source.acceptedTexts)
+          ? source.acceptedTexts.filter(Boolean)
+          : [],
+      steps: Array.isArray(source.steps) && source.steps.length > 0
+        ? source.steps.filter(Boolean)
+        : Array.isArray(fallbackProblem?.steps)
+          ? fallbackProblem.steps
+          : [source.explanation || "根据题意列式或按概念判断。"],
+      explanation: source.explanation || fallbackProblem?.explanation || "根据题意列式或按概念判断。",
+      type: source.type || fallbackProblem?.type || "generated-question"
+    };
+  }
+
+  function buildUniqueLocalQuestion() {
+    let nextQuestion = buildGeneratedQuestion();
+    for (let attempt = 0; attempt < 16 && recentQuestionTexts.includes(nextQuestion.question); attempt += 1) {
+      nextQuestion = buildGeneratedQuestion();
+    }
+    return normalizeQuestionShape(nextQuestion, nextQuestion);
+  }
+
+  async function buildQuestionWithOptionalAi() {
+    const localQuestion = buildUniqueLocalQuestion();
+
+    try {
+      const response = await fetch("/api/generate-question", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          modelId: model.id,
+          grade: model.grade,
+          domain: model.domain,
+          localQuestion
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("question api unavailable");
+      }
+
+      const data = await response.json();
+      return normalizeQuestionShape(data, localQuestion);
+    } catch (error) {
+      return localQuestion;
+    }
+  }
+
+  function chineseNumberToArabic(value) {
+    const digits = {
+      零: 0,
+      〇: 0,
+      一: 1,
+      二: 2,
+      两: 2,
+      三: 3,
+      四: 4,
+      五: 5,
+      六: 6,
+      七: 7,
+      八: 8,
+      九: 9
+    };
+
+    if (/^\d+$/.test(value)) {
+      return Number(value);
+    }
+
+    if (!value.includes("十")) {
+      return digits[value] ?? value;
+    }
+
+    const [left, right] = value.split("十");
+    const tens = left ? digits[left] || 0 : 1;
+    const ones = right ? digits[right] || 0 : 0;
+    return tens * 10 + ones;
+  }
+
+  function convertChineseNumbers(text) {
+    return String(text || "").replace(/[零〇一二两三四五六七八九十]+/g, (match) => {
+      const converted = chineseNumberToArabic(match);
+      return Number.isFinite(converted) ? String(converted) : match;
+    });
+  }
+
   function extractNumbers(text) {
-    const matches = text.match(/-?\d+(?:\.\d+)?/g) || [];
+    const normalized = convertChineseNumbers(text);
+    const matches = normalized.match(/-?\d+(?:\.\d+)?/g) || [];
     return matches.map(Number).filter((value) => Number.isFinite(value));
   }
 
-  function normalizeAnswerText(text) {
-    return String(text || "")
+  function normalizeAnswer(text) {
+    return convertChineseNumbers(text)
+      .toLowerCase()
+      .replace(/（/g, "(")
+      .replace(/）/g, ")")
+      .replace(/，/g, ",")
+      .replace(/。|！|？|、|；|：|\.|!|\?|;|:/g, "")
       .replace(/\s+/g, "")
       .replace(/＝/g, "=")
-      .toLowerCase();
+      .replace(/不可以|不能够|不能|无法|不行/g, "__NO__")
+      .replace(/能够|能/g, "可以")
+      .replace(/__NO__/g, "不能")
+      .replace(/正确|对的/g, "是")
+      .replace(/错误|不正确|不对/g, "不是")
+      .replace(/只有/g, "")
+      .replace(/平方厘米|平方毫米|平方米|平方cm|平方mm|平方m/g, "")
+      .replace(/厘米|毫米|米|cm|mm|m|度|°/g, "")
+      .replace(/个端点|端点|个/g, "")
+      .replace(/答案是|答案为|结果是|结果为/g, "")
+      .replace(/的/g, "");
   }
 
-  function isAnswerCorrect(userAnswer, question) {
-    const normalized = normalizeAnswerText(userAnswer);
-
-    if (Array.isArray(question.acceptedTexts)) {
-      const hasAcceptedText = question.acceptedTexts.some((item) => {
-        const accepted = normalizeAnswerText(item);
-        return accepted && normalized.includes(accepted);
-      });
-      if (hasAcceptedText) {
-        return true;
-      }
+  function answersMatch(userNormalized, acceptedNormalized) {
+    if (!acceptedNormalized) {
+      return false;
     }
 
+    const exactConcepts = new Set(["是", "不是", "可以", "不能", "线段", "射线", "直线", "锐角", "直角", "钝角", "平角"]);
+    if (exactConcepts.has(acceptedNormalized)) {
+      return userNormalized === acceptedNormalized || userNormalized === `答案${acceptedNormalized}`;
+    }
+
+    return (
+      userNormalized === acceptedNormalized ||
+      userNormalized.includes(acceptedNormalized) ||
+      acceptedNormalized.includes(userNormalized)
+    );
+  }
+
+  function gradeAnswerLocally(userAnswer, question) {
+    const normalized = normalizeAnswer(userAnswer);
     const numbers = extractNumbers(userAnswer);
     const tolerance = Number(question.tolerance) || 0.01;
 
     if (Array.isArray(question.answerNumbers) && question.answerNumbers.length > 0) {
+      if (numbers.length === 0) {
+        return null;
+      }
       return question.answerNumbers.every((target) =>
         numbers.some((value) => Math.abs(value - target) <= tolerance)
       );
@@ -814,11 +980,38 @@
       }
 
       if (numbers.length >= 2 && numbers[1] !== 0) {
-        return Math.abs(numbers[0] / numbers[1] - question.answerValue) <= tolerance;
+        if (Math.abs(numbers[0] / numbers[1] - question.answerValue) <= tolerance) {
+          return true;
+        }
+      }
+
+      if (numbers.length > 0) {
+        return false;
       }
     }
 
-    return false;
+    const acceptedAnswers = [
+      question.answer,
+      ...(Array.isArray(question.aliases) ? question.aliases : []),
+      ...(Array.isArray(question.acceptedTexts) ? question.acceptedTexts : [])
+    ]
+      .filter(Boolean)
+      .map(normalizeAnswer)
+      .filter(Boolean);
+
+    if (acceptedAnswers.some((accepted) => answersMatch(normalized, accepted))) {
+      return true;
+    }
+
+    if (Array.isArray(question.keywords) && question.keywords.length > 0) {
+      const hitCount = question.keywords.filter((keyword) => normalized.includes(normalizeAnswer(keyword))).length;
+      if (hitCount >= Math.min(3, question.keywords.length)) {
+        return true;
+      }
+      return null;
+    }
+
+    return acceptedAnswers.length > 0 ? false : null;
   }
 
   function createProblemSection(titleText, content) {
@@ -851,17 +1044,44 @@
     aiProblemBox.replaceChildren(createProblemSection("题目", problem.question));
   }
 
-  function renderGradeResult(problem, userAnswer, correct) {
+  async function gradeAnswerWithAi(problem, userAnswer) {
+    const response = await fetch("/api/grade-answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question: problem.question,
+        standardAnswer: problem.answer,
+        answerValue: problem.answerValue,
+        aliases: problem.aliases || problem.acceptedTexts || [],
+        userAnswer,
+        modelId: model.id
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error("grade api unavailable");
+    }
+
+    return response.json();
+  }
+
+  function renderGradeResult(problem, userAnswer, correct, extraFeedback = "") {
     resultCard.hidden = false;
     gradeResult.hidden = false;
     gradeResult.className = `grade-result-card ${correct ? "is-correct" : "is-wrong"}`;
-    gradeResult.replaceChildren(
+    const sections = [
       createProblemSection("是否正确", correct ? "正确" : "错误"),
       createProblemSection("你的答案", userAnswer),
       createProblemSection("正确答案", problem.answer),
       createProblemSection("解题步骤", problem.steps),
       createProblemSection("简单讲解", problem.explanation)
-    );
+    ];
+
+    if (extraFeedback) {
+      sections.push(createProblemSection("批改反馈", extraFeedback));
+    }
+
+    gradeResult.replaceChildren(...sections);
   }
 
   function renderGradeMessage(message) {
@@ -881,7 +1101,7 @@
     syncFormulaCollapse();
   });
 
-  generateProblemButton.addEventListener("click", () => {
+  generateProblemButton.addEventListener("click", async () => {
     aiProblemBox.textContent = "正在随机出题...";
     aiProblemBox.classList.remove("muted-box", "format-error");
     resultCard.hidden = true;
@@ -891,22 +1111,18 @@
     generateProblemButton.disabled = true;
     generateProblemButton.textContent = "生成中...";
 
-    window.setTimeout(() => {
-      let nextQuestion = buildGeneratedQuestion();
-      for (let attempt = 0; attempt < 12 && recentQuestionTexts.includes(nextQuestion.question); attempt += 1) {
-        nextQuestion = buildGeneratedQuestion();
-      }
-
-      currentQuestion = nextQuestion;
+    try {
+      currentQuestion = await buildQuestionWithOptionalAi();
       recentQuestionTexts.push(currentQuestion.question);
       if (recentQuestionTexts.length > 12) {
         recentQuestionTexts.shift();
       }
 
       renderQuestion(currentQuestion);
+    } finally {
       generateProblemButton.disabled = false;
       generateProblemButton.textContent = "随机出题";
-    }, 120);
+    }
   });
 
   gradeForm.addEventListener("submit", async (event) => {
@@ -923,8 +1139,21 @@
       return;
     }
 
-    const correct = isAnswerCorrect(userAnswer, currentQuestion);
-    renderGradeResult(currentQuestion, userAnswer, correct);
+    let correct = gradeAnswerLocally(userAnswer, currentQuestion);
+    let feedback = "";
+
+    if (correct === null) {
+      try {
+        const aiGrade = await gradeAnswerWithAi(currentQuestion, userAnswer);
+        correct = Boolean(aiGrade.isCorrect);
+        feedback = aiGrade.feedback || aiGrade.reason || "";
+      } catch (error) {
+        correct = false;
+        feedback = "本地规则无法确认该答案，已按标准答案判为需要订正。";
+      }
+    }
+
+    renderGradeResult(currentQuestion, userAnswer, correct, feedback);
     incrementStats(correct);
     recordMistake(currentQuestion.question, userAnswer, correct);
   });

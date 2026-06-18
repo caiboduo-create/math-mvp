@@ -316,6 +316,9 @@ h2 {
 
 .interactive-container.is-geogebra {
   min-height: 390px;
+  height: 400px;
+  max-height: 430px;
+  overflow: hidden;
 }
 
 .interactive-container.is-custom {
@@ -330,6 +333,13 @@ h2 {
 .interactive-container article,
 .interactive-container > div {
   max-width: 100%;
+}
+
+.interactive-container.is-geogebra > div,
+.interactive-container.is-geogebra iframe {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden;
 }
 
 .interactive-container iframe {
@@ -448,6 +458,12 @@ h2 {
 .interactive-placeholder strong {
   color: var(--blue-900);
   font-size: 1.1rem;
+}
+
+.geogebra-retry-button {
+  justify-self: center;
+  width: fit-content;
+  min-width: 118px;
 }
 
 .custom-svg {
@@ -1734,6 +1750,8 @@ a:focus-visible {
 
   .interactive-container.is-geogebra {
     min-height: 320px;
+    height: 320px;
+    max-height: 340px;
   }
 
   .custom-interactive {

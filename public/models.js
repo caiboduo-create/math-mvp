@@ -552,13 +552,278 @@
     return {
       question,
       answer,
+      answerValue: options.answerValue,
+      aliases: options.aliases || options.acceptedTexts || [],
       steps: options.steps || [],
       explanation: options.explanation || "先识别题目中的已知条件，再选择对应公式或规则求解。",
+      type: options.type || "local-template",
       ...options
     };
   }
 
+  function basicGeometryEndpointQuestion() {
+    const shape = choice([
+      { name: "线段", label: choice(["AB", "CD", "MN"]), endpoints: 2, answer: "两个端点", aliases: ["2", "2个", "两个", "两个端点"] },
+      { name: "射线", label: choice(["OP", "OA", "PQ"]), endpoints: 1, answer: "一个端点", aliases: ["1", "1个", "一个", "一个端点", "只有一个端点"] },
+      { name: "直线", label: choice(["l", "AB", "m"]), endpoints: 0, answer: "没有端点", aliases: ["0", "0个", "没有", "没有端点", "无端点"] }
+    ]);
+
+    return questionResult(
+      `${shape.name} ${shape.label} 有几个端点？`,
+      shape.answer,
+      {
+        answerValue: shape.endpoints,
+        aliases: shape.aliases,
+        type: "endpoint-count",
+        steps: [`先判断图形是${shape.name}`, `${shape.name}的端点数量是：${shape.answer}`],
+        explanation: "线段有两个端点，射线有一个端点，直线没有端点。"
+      }
+    );
+  }
+
+  function basicGeometryLengthQuestion() {
+    const item = choice([
+      { name: "线段 AB", measurable: true, answer: "可以", aliases: ["可以", "能", "能够", "可以测量"] },
+      { name: "射线 OP", measurable: false, answer: "不能", aliases: ["不能", "不可以", "无法", "不能测量"] },
+      { name: "直线 l", measurable: false, answer: "不能", aliases: ["不能", "不可以", "无法", "不能测量"] }
+    ]);
+
+    return questionResult(
+      `${item.name} 可以测量长度吗？`,
+      item.answer,
+      {
+        aliases: item.aliases,
+        type: "length-measurable",
+        steps: ["能测量长度的图形必须有确定的起点和终点", `${item.name}${item.measurable ? "有确定长度" : "会无限延伸，没有确定长度"}`],
+        explanation: "线段可以测量长度；直线和射线会无限延伸，不能测量整体长度。"
+      }
+    );
+  }
+
+  function basicGeometryAngleTypeQuestion() {
+    const angle = choice([
+      { degree: 25, typeName: "锐角" },
+      { degree: 35, typeName: "锐角" },
+      { degree: 90, typeName: "直角" },
+      { degree: 120, typeName: "钝角" },
+      { degree: 150, typeName: "钝角" },
+      { degree: 180, typeName: "平角" }
+    ]);
+
+    return questionResult(
+      `一个角是 ${angle.degree}°，它是什么角？`,
+      angle.typeName,
+      {
+        aliases: [angle.typeName],
+        type: "angle-classification",
+        steps: ["小于 90° 是锐角，等于 90° 是直角", "大于 90° 且小于 180° 是钝角，等于 180° 是平角", `${angle.degree}° 是${angle.typeName}`],
+        explanation: "角的分类主要看角度与 90°、180° 的关系。"
+      }
+    );
+  }
+
+  function basicGeometryAngleComputeQuestion() {
+    const mode = choice(["sum", "supplement", "complement"]);
+
+    if (mode === "sum") {
+      const a = randomInt(25, 75);
+      const b = randomInt(20, 70);
+      return questionResult(
+        `∠AOB = ${a}°，∠BOC = ${b}°，且 OB 在∠AOC 内部，求 ∠AOC。`,
+        `${a + b}°`,
+        {
+          answerValue: a + b,
+          aliases: [`${a + b}`, `${a + b}度`, `${a + b}°`],
+          type: "angle-sum",
+          steps: ["相邻两个角组成大角时，角度相加", `∠AOC = ${a}° + ${b}° = ${a + b}°`],
+          explanation: "求由两个相邻角组成的大角时，把两个角的度数相加。"
+        }
+      );
+    }
+
+    if (mode === "supplement") {
+      const known = randomInt(35, 145);
+      return questionResult(
+        `两个角互补，其中一个角是 ${known}°，另一个角是多少度？`,
+        `${180 - known}°`,
+        {
+          answerValue: 180 - known,
+          aliases: [`${180 - known}`, `${180 - known}度`, `${180 - known}°`],
+          type: "supplement-angle",
+          steps: ["互补的两个角和为 180°", `另一个角 = 180° - ${known}° = ${180 - known}°`],
+          explanation: "看到“互补”，就用 180° 减去已知角。"
+        }
+      );
+    }
+
+    const known = randomInt(15, 75);
+    return questionResult(
+      `两个角互余，其中一个角是 ${known}°，另一个角是多少度？`,
+      `${90 - known}°`,
+      {
+        answerValue: 90 - known,
+        aliases: [`${90 - known}`, `${90 - known}度`, `${90 - known}°`],
+        type: "complement-angle",
+        steps: ["互余的两个角和为 90°", `另一个角 = 90° - ${known}° = ${90 - known}°`],
+        explanation: "看到“互余”，就用 90° 减去已知角。"
+      }
+    );
+  }
+
+  function basicGeometryConceptQuestion() {
+    const item = choice(["difference", "identify-segment"]);
+
+    if (item === "identify-segment") {
+      return questionResult(
+        "有两个端点且可以测量长度的是直线、射线还是线段？",
+        "线段",
+        {
+          aliases: ["线段"],
+          type: "concept-judgement",
+          steps: ["有两个端点", "可以测量长度", "符合这两个条件的是线段"],
+          explanation: "线段有两个端点并且长度确定。"
+        }
+      );
+    }
+
+    return questionResult(
+      "射线和线段的主要区别是什么？",
+      "射线有一个端点并向一方无限延伸；线段有两个端点，可以测量长度。",
+      {
+        aliases: ["射线一个端点线段两个端点", "射线向一方无限延伸线段可以测量长度"],
+        keywords: ["射线", "一个端点", "无限延伸", "线段", "两个端点"],
+        type: "concept-difference",
+        steps: ["先比较端点数量", "再比较能否无限延伸和能否测量长度"],
+        explanation: "射线只有一个端点并向一方无限延伸；线段有两个端点，长度确定。"
+      }
+    );
+  }
+
+  function symmetryAxisDistanceQuestion() {
+    const unit = choice(["厘米", "米", "毫米"]);
+    const distance = randomInt(2, 12);
+    return questionResult(
+      `点 A 到对称轴的距离是 ${distance}${unit}，A' 到对称轴的距离是多少？`,
+      `${distance}${unit}`,
+      {
+        answerValue: distance,
+        aliases: [`${distance}`, `${distance}${unit}`, `${distance} ${unit}`],
+        type: "axis-distance",
+        steps: ["轴对称点到对称轴的距离相等", `所以 A' 到对称轴的距离也是 ${distance}${unit}`],
+        explanation: "对称轴是对应点连线的垂直平分线，两边距离相等。"
+      }
+    );
+  }
+
+  function symmetryPointDistanceQuestion() {
+    const unit = choice(["厘米", "米", "毫米"]);
+    const distance = randomInt(2, 12);
+    const total = distance * 2;
+    return questionResult(
+      `点 A 到对称轴距离是 ${distance}${unit}，A 和 A' 的距离是多少？`,
+      `${total}${unit}`,
+      {
+        answerValue: total,
+        aliases: [`${total}`, `${total}${unit}`, `${total} ${unit}`, `A和A'距离是${total}${unit}`],
+        type: "symmetric-points-distance",
+        steps: ["A 到对称轴的距离等于 A' 到对称轴的距离", `A 和 A' 的距离 = ${distance}×2 = ${total}${unit}`],
+        explanation: "对称轴在 A 和 A' 的正中间，所以两点距离是点到轴距离的 2 倍。"
+      }
+    );
+  }
+
+  function symmetryReverseDistanceQuestion() {
+    const unit = choice(["厘米", "米", "毫米"]);
+    const half = randomInt(2, 12);
+    const total = half * 2;
+    return questionResult(
+      `点 A 和它的对称点 A' 相距 ${total}${unit}，那么点 A 到对称轴的距离是多少？`,
+      `${half}${unit}`,
+      {
+        answerValue: half,
+        aliases: [`${half}`, `${half}${unit}`, `${half} ${unit}`],
+        type: "reverse-axis-distance",
+        steps: ["对称轴在 A 和 A' 的正中间", `点 A 到对称轴的距离 = ${total}÷2 = ${half}${unit}`],
+        explanation: "已知对应点之间的距离，除以 2 就得到点到对称轴的距离。"
+      }
+    );
+  }
+
+  function symmetryCoordinateQuestion() {
+    const axis = choice(["x", "y"]);
+    const x = randomInt(-6, 6) || 3;
+    const y = randomInt(-6, 6) || 4;
+    const reflectedX = axis === "y" ? -x : x;
+    const reflectedY = axis === "x" ? -y : y;
+    return questionResult(
+      `点 A(${x}, ${y}) 关于 ${axis} 轴对称后的点坐标是多少？`,
+      `(${reflectedX}, ${reflectedY})`,
+      {
+        answerNumbers: [reflectedX, reflectedY],
+        aliases: [`(${reflectedX},${reflectedY})`, `${reflectedX},${reflectedY}`, `${reflectedX}，${reflectedY}`],
+        type: "coordinate-reflection",
+        steps: [axis === "y" ? "关于 y 轴对称，横坐标变相反数，纵坐标不变" : "关于 x 轴对称，横坐标不变，纵坐标变相反数", `结果是 (${reflectedX}, ${reflectedY})`],
+        explanation: "坐标轴对称题要先判断关于哪条轴，再改变对应坐标的符号。"
+      }
+    );
+  }
+
+  function symmetryJudgeQuestion() {
+    const axis = choice(["x", "y"]);
+    const x = randomInt(1, 6);
+    const y = randomInt(1, 6);
+    const shouldBeTrue = choice([true, false]);
+    const pointA = `A(${x}, ${y})`;
+    const pointB = axis === "y"
+      ? shouldBeTrue ? `B(${-x}, ${y})` : `B(${-x}, ${-y})`
+      : shouldBeTrue ? `B(${x}, ${-y})` : `B(${-x}, ${-y})`;
+    const answer = shouldBeTrue ? "是" : "不是";
+    return questionResult(
+      `点 ${pointA} 和点 ${pointB} 是否关于 ${axis} 轴对称？`,
+      answer,
+      {
+        aliases: shouldBeTrue ? ["是", "正确", "对"] : ["不是", "错误", "不对"],
+        type: "symmetry-judgement",
+        steps: [axis === "y" ? "关于 y 轴对称时，横坐标互为相反数，纵坐标相同" : "关于 x 轴对称时，横坐标相同，纵坐标互为相反数", `所以判断结果是：${answer}`],
+        explanation: "判断坐标是否对称，要看对应坐标是否满足对称轴的符号变化规则。"
+      }
+    );
+  }
+
+  const questionTypePools = {
+    "basic-geometry": [
+      basicGeometryEndpointQuestion,
+      basicGeometryLengthQuestion,
+      basicGeometryAngleTypeQuestion,
+      basicGeometryAngleComputeQuestion,
+      basicGeometryConceptQuestion
+    ],
+    symmetry: [
+      symmetryAxisDistanceQuestion,
+      symmetryPointDistanceQuestion,
+      symmetryReverseDistanceQuestion,
+      symmetryCoordinateQuestion,
+      symmetryJudgeQuestion
+    ]
+  };
+  const questionTypeCursor = {};
+
+  function nextQuestionFromPool(modelId, pool) {
+    if (!Number.isInteger(questionTypeCursor[modelId])) {
+      questionTypeCursor[modelId] = randomInt(0, pool.length - 1);
+    }
+
+    const generator = pool[questionTypeCursor[modelId] % pool.length];
+    questionTypeCursor[modelId] = (questionTypeCursor[modelId] + 1) % pool.length;
+    return generator();
+  }
+
   function generateQuestion(modelId) {
+    const pool = questionTypePools[modelId];
+    if (Array.isArray(pool) && pool.length > 0) {
+      return nextQuestionFromPool(modelId, pool);
+    }
+
     const unit = choice(["厘米", "米", "毫米"]);
     const a = randomInt(2, 9);
     const b = randomInt(2, 9);
@@ -1209,6 +1474,7 @@
     getModel(id) {
       return models.find((model) => model.id === id);
     },
+    questionTypes: questionTypePools,
     generateQuestion,
     round
   };

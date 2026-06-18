@@ -17,9 +17,7 @@
         "面积 S": `约 ${round(pi * p.radius * p.radius)}`,
         "周长 C": `约 ${round(2 * pi * p.radius)}`,
         "核心公式": "S = πr²，C = 2πr"
-      }),
-      explanation: (p) =>
-        `圆由半径 r 决定。现在 r=${round(p.radius)}，面积 S=πr²，周长 C=2πr。半径加倍时，周长加倍，但面积会变成原来的 4 倍。`
+      })
     },
     {
       id: "triangle",
@@ -37,9 +35,7 @@
         "面积 S": round((p.base * p.height) / 2),
         "底高关系": "S = 1/2 × b × h",
         "顶点偏移": round(p.shift)
-      }),
-      explanation: (p) =>
-        `三角形面积只看底和对应的高。现在 b=${round(p.base)}，h=${round(p.height)}，所以 S=1/2×b×h=${round((p.base * p.height) / 2)}。左右移动顶点会改变边长，但只要底和高不变，面积不变。`
+      })
     },
     {
       id: "parabola",
@@ -57,9 +53,7 @@
         "函数": `y = ${round(p.a)}(x - ${round(p.h)})² + ${round(p.k)}`,
         "顶点": `(${round(p.h)}, ${round(p.k)})`,
         "开口": p.a >= 0 ? "向上" : "向下"
-      }),
-      explanation: (p) =>
-        `抛物线可以写成顶点式 y=a(x-h)²+k。当前顶点是 (${round(p.h)}, ${round(p.k)})。a=${round(p.a)}，所以开口${p.a >= 0 ? "向上" : "向下"}；|a| 越大，曲线越窄。`
+      })
     },
     {
       id: "sector",
@@ -76,9 +70,7 @@
         "面积 S": round((p.angle / 360) * pi * p.radius * p.radius),
         "弧长 L": round((p.angle / 360) * 2 * pi * p.radius),
         "核心公式": "S = θ/360° × πr²，L = θ/360° × 2πr"
-      }),
-      explanation: (p) =>
-        `扇形是圆的一部分。现在 r=${round(p.radius)}，θ=${round(p.angle)}°，它占整个圆的 ${round(p.angle / 360)}。面积和弧长都按这个比例从整圆中取出。`
+      })
     }
   ];
 

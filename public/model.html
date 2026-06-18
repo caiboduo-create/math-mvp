@@ -35,27 +35,51 @@
         <div id="metricPanel" class="metric-panel"></div>
       </section>
 
-      <section class="card ai-card">
+      <section class="card stats-card">
         <div class="card-heading">
-          <h2>AI讲解</h2>
+          <h2>答题统计</h2>
         </div>
-        <div id="aiExplanation" class="content-box"></div>
+        <div class="stats-panel" aria-live="polite">
+          <div class="stat-item">
+            <span>总答题</span>
+            <strong id="statTotal">0</strong>
+          </div>
+          <div class="stat-item">
+            <span>答对</span>
+            <strong id="statCorrect">0</strong>
+          </div>
+          <div class="stat-item">
+            <span>答错</span>
+            <strong id="statWrong">0</strong>
+          </div>
+          <div class="stat-item">
+            <span>正确率</span>
+            <strong id="statRate">0%</strong>
+          </div>
+        </div>
+        <button class="secondary-button" id="resetStatsButton" type="button">重置统计</button>
       </section>
 
       <section class="card practice-card">
         <div class="card-heading">
-          <h2>AI出题</h2>
-          <p>根据当前模型和参数生成应用题，并支持自动批改。</p>
+          <h2>随机出题</h2>
+          <p>根据当前模型随机生成题目，提交答案后自动批改。</p>
         </div>
         <div class="practice-actions">
-          <button class="primary-button" id="generateProblemButton" type="button">🧠 AI出题</button>
+          <button class="primary-button" id="generateProblemButton" type="button">随机出题</button>
         </div>
-        <div id="aiProblemBox" class="content-box muted-box">点击“AI出题”后，这里只显示新题目。</div>
-        <form id="gradeForm" class="grade-form" hidden>
+        <div id="aiProblemBox" class="content-box muted-box">点击“随机出题”后，这里只显示新题目。</div>
+        <form id="gradeForm" class="grade-form">
           <label class="answer-label" for="studentAnswer">你的答案</label>
           <textarea id="studentAnswer" rows="4" placeholder="写下你的计算过程或最终答案"></textarea>
           <button class="primary-button" type="submit">提交批改</button>
         </form>
+      </section>
+
+      <section class="card result-card" id="resultCard" hidden>
+        <div class="card-heading">
+          <h2>批改结果</h2>
+        </div>
         <div id="gradeResult" class="grade-result-card" hidden></div>
       </section>
 

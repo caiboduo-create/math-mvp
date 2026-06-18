@@ -13,7 +13,6 @@
   const description = document.getElementById("modelDescription");
   const sliders = document.getElementById("sliderPanel");
   const metrics = document.getElementById("metricPanel");
-  const explanation = document.getElementById("aiExplanation");
   const askForm = document.getElementById("askForm");
   const askInput = document.getElementById("askInput");
   const askResult = document.getElementById("askResult");
@@ -23,7 +22,13 @@
   const aiProblemBox = document.getElementById("aiProblemBox");
   const gradeForm = document.getElementById("gradeForm");
   const studentAnswer = document.getElementById("studentAnswer");
+  const resultCard = document.getElementById("resultCard");
   const gradeResult = document.getElementById("gradeResult");
+  const statTotal = document.getElementById("statTotal");
+  const statCorrect = document.getElementById("statCorrect");
+  const statWrong = document.getElementById("statWrong");
+  const statRate = document.getElementById("statRate");
+  const resetStatsButton = document.getElementById("resetStatsButton");
 
   if (!model) {
     document.title = "模型不存在 - AI数学学习产品V4";
@@ -31,11 +36,19 @@
     description.textContent = "请返回首页选择一个已配置的数学模型。";
     sliders.innerHTML = "";
     metrics.innerHTML = "";
-    explanation.textContent = "当前 URL 没有提供有效的模型 id。";
     askForm.hidden = true;
+    gradeForm.hidden = true;
+    resultCard.hidden = false;
+    gradeResult.hidden = false;
+    gradeResult.className = "grade-result-card is-wrong";
+    gradeResult.textContent = "当前 URL 没有提供有效的模型 id。";
     if (generateProblemButton) {
       generateProblemButton.disabled = true;
     }
+    if (resetStatsButton) {
+      resetStatsButton.disabled = true;
+    }
+    updateStatsPanel();
     updateMistakeCount();
     return;
   }
@@ -182,14 +195,9 @@
     });
   }
 
-  function renderContent() {
-    explanation.textContent = model.explanation(state);
-  }
-
   function renderAll() {
     renderSvg();
     renderMetrics();
-    renderContent();
   }
 
   function buildSliders() {
@@ -221,6 +229,60 @@
     });
   }
 
+  function statsStorageKey() {
+    return model ? `mathStats_${model.id}` : "mathStats_unknown";
+  }
+
+  function normalizeStats(value) {
+    const correct = Math.max(0, Number(value?.correct) || 0);
+    const wrong = Math.max(0, Number(value?.wrong) || 0);
+    return {
+      correct,
+      wrong,
+      total: correct + wrong
+    };
+  }
+
+  function getStats() {
+    try {
+      const raw = localStorage.getItem(statsStorageKey());
+      return normalizeStats(raw ? JSON.parse(raw) : null);
+    } catch (error) {
+      return normalizeStats(null);
+    }
+  }
+
+  function saveStats(stats) {
+    localStorage.setItem(statsStorageKey(), JSON.stringify(normalizeStats(stats)));
+  }
+
+  function updateStatsPanel() {
+    const stats = getStats();
+    const rate = stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0;
+    statTotal.textContent = String(stats.total);
+    statCorrect.textContent = String(stats.correct);
+    statWrong.textContent = String(stats.wrong);
+    statRate.textContent = `${rate}%`;
+  }
+
+  function incrementStats(correct) {
+    const stats = getStats();
+    if (correct) {
+      stats.correct += 1;
+    } else {
+      stats.wrong += 1;
+    }
+    saveStats(stats);
+    updateStatsPanel();
+    updateMistakeCount();
+  }
+
+  function resetStats() {
+    saveStats({ correct: 0, wrong: 0 });
+    updateStatsPanel();
+    updateMistakeCount();
+  }
+
   function mistakeStorageKey() {
     return "math-ai-v4-mistakes";
   }
@@ -239,12 +301,8 @@
     localStorage.setItem(mistakeStorageKey(), JSON.stringify(mistakes));
   }
 
-  function getCurrentModelMistakes() {
-    return getMistakes().filter((item) => item.model === modelId);
-  }
-
   function updateMistakeCount() {
-    const count = model ? getCurrentModelMistakes().length : 0;
+    const count = model ? getStats().wrong : 0;
     mistakeCount.textContent = `本模型错题数量：${count}`;
   }
 
@@ -285,10 +343,6 @@
     return data.answer || "AI 暂时没有返回内容。";
   }
 
-  function currentParameterText() {
-    return model.params.map((param) => `${param.label}=${round(state[param.key])}${param.unit || ""}`).join("，");
-  }
-
   function randomInt(min, max) {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
@@ -309,7 +363,17 @@
     return `平方${unit}`;
   }
 
+  function formatParabolaFormula(a, h, k) {
+    const hPart = h === 0 ? "x" : `x${h < 0 ? "+" : "-"}${Math.abs(h)}`;
+    const kPart = k === 0 ? "" : `${k > 0 ? "+" : ""}${k}`;
+    return `y=${a}(${hPart})²${kPart}`;
+  }
+
   function nearCurrent(value, min, max, variance = 0.45) {
+    if (!Number.isFinite(Number(value)) || Math.abs(Number(value)) < 1) {
+      return randomInt(min, max);
+    }
+
     const lower = Math.max(min, Math.floor(value * (1 - variance)));
     const upper = Math.min(max, Math.ceil(value * (1 + variance)));
     return randomInt(lower, Math.max(lower, upper));
@@ -383,24 +447,73 @@
       const a = choice([-2, -1, 1, 2]);
       const h = nearCurrent(state.h, -5, 5, 1);
       const k = nearCurrent(state.k, -6, 6, 1);
+      const formula = formatParabolaFormula(a, h, k);
+      const openText = a > 0 ? "向上" : "向下";
+      const mode = choice(["open", "vertex", "axis", "value"]);
+
+      if (mode === "open") {
+        return {
+          question: choice([
+            `已知抛物线 ${formula}，它的开口方向是什么？`,
+            `观察函数 ${formula}，判断这条抛物线开口向上还是向下。`,
+            `二次函数 ${formula} 的 a=${a}，请写出开口方向。`
+          ]),
+          answer: openText,
+          acceptedTexts: [openText],
+          steps: [`二次函数顶点式为 y=a(x-h)²+k`, `这里 a=${a}`, `a${a > 0 ? "＞0" : "＜0"}，所以开口${openText}`],
+          explanation: "判断开口方向只看 a 的正负：a 大于 0 开口向上，a 小于 0 开口向下。"
+        };
+      }
+
+      if (mode === "vertex") {
+        return {
+          question: choice([
+            `已知抛物线 ${formula}，写出它的顶点坐标。`,
+            `函数 ${formula} 的顶点在哪里？`,
+            `请判断二次函数 ${formula} 的顶点坐标。`
+          ]),
+          answer: `(${h}, ${k})`,
+          answerNumbers: [h, k],
+          tolerance: 0.01,
+          steps: ["顶点式为 y=a(x-h)²+k", `式子中 h=${h}，k=${k}`, `所以顶点坐标是 (${h}, ${k})`],
+          explanation: "顶点式可以直接读出顶点坐标，括号里的 h 是横坐标，外面的 k 是纵坐标。"
+        };
+      }
+
+      if (mode === "axis") {
+        return {
+          question: choice([
+            `已知抛物线 ${formula}，它的对称轴是什么？`,
+            `函数 ${formula} 的对称轴方程是？`,
+            `请写出抛物线 ${formula} 的对称轴。`
+          ]),
+          answer: `x=${h}`,
+          answerNumbers: [h],
+          acceptedTexts: [`x=${h}`, `x＝${h}`],
+          tolerance: 0.01,
+          steps: ["顶点式为 y=a(x-h)²+k", `式子中 h=${h}`, `所以对称轴是 x=${h}`],
+          explanation: "顶点式的对称轴总是经过顶点，方程是 x=h。"
+        };
+      }
+
       const x = h + choice([-3, -2, -1, 1, 2, 3]);
       const value = cleanNumber(a * Math.pow(x - h, 2) + k);
       return {
         question: choice([
-          `已知抛物线 y=${a}(x-${h})²+${k}，当 x=${x} 时，y 的值是多少？`,
-          `一条抛物线满足 y=${a}(x-${h})²+${k}，代入 x=${x}，求 y。`,
-          `函数 y=${a}(x-${h})²+${k} 中，x=${x} 对应的函数值是多少？`
+          `已知抛物线 ${formula}，当 x=${x} 时，y 的值是多少？`,
+          `一条抛物线满足 ${formula}，代入 x=${x}，求 y。`,
+          `函数 ${formula} 中，x=${x} 对应的函数值是多少？`
         ]),
         answer: `${round(value, 2)}`,
         answerValue: value,
         tolerance: 0.05,
-        steps: [`把 x=${x} 代入 y=${a}(x-${h})²+${k}`, `y=${a}×(${x}-${h})²+${k}`, `y=${round(value, 2)}`],
+        steps: [`把 x=${x} 代入 ${formula}`, `y=${a}×(${x}-${h})²+${k}`, `y=${round(value, 2)}`],
         explanation: "顶点式中先算括号里的差，再平方、乘系数，最后加上 k。"
       };
     }
 
     const radius = nearCurrent(state.radius || 6, 2, 18);
-    const angle = randomInt(2, 12) * 15;
+    const angle = randomInt(2, 22) * 15;
     const mode = choice(["area", "arc"]);
 
     if (mode === "arc") {
@@ -439,9 +552,40 @@
     return matches.map(Number).filter((value) => Number.isFinite(value));
   }
 
+  function normalizeAnswerText(text) {
+    return String(text || "")
+      .replace(/\s+/g, "")
+      .replace(/＝/g, "=")
+      .toLowerCase();
+  }
+
   function isAnswerCorrect(userAnswer, question) {
+    const normalized = normalizeAnswerText(userAnswer);
+
+    if (Array.isArray(question.acceptedTexts)) {
+      const hasAcceptedText = question.acceptedTexts.some((item) => {
+        const accepted = normalizeAnswerText(item);
+        return accepted && normalized.includes(accepted);
+      });
+      if (hasAcceptedText) {
+        return true;
+      }
+    }
+
     const numbers = extractNumbers(userAnswer);
-    return numbers.some((value) => Math.abs(value - question.answerValue) <= question.tolerance);
+    const tolerance = Number(question.tolerance) || 0.01;
+
+    if (Array.isArray(question.answerNumbers) && question.answerNumbers.length > 0) {
+      return question.answerNumbers.every((target) =>
+        numbers.some((value) => Math.abs(value - target) <= tolerance)
+      );
+    }
+
+    if (Number.isFinite(question.answerValue)) {
+      return numbers.some((value) => Math.abs(value - question.answerValue) <= tolerance);
+    }
+
+    return false;
   }
 
   function createProblemSection(titleText, content) {
@@ -475,6 +619,7 @@
   }
 
   function renderGradeResult(problem, userAnswer, correct) {
+    resultCard.hidden = false;
     gradeResult.hidden = false;
     gradeResult.className = `grade-result-card ${correct ? "is-correct" : "is-wrong"}`;
     gradeResult.replaceChildren(
@@ -486,13 +631,22 @@
     );
   }
 
+  function renderGradeMessage(message) {
+    resultCard.hidden = false;
+    gradeResult.hidden = false;
+    gradeResult.className = "grade-result-card is-wrong";
+    gradeResult.textContent = message;
+  }
+
   generateProblemButton.addEventListener("click", () => {
-    aiProblemBox.textContent = "AI 正在出题...";
+    aiProblemBox.textContent = "正在随机出题...";
     aiProblemBox.classList.remove("muted-box", "format-error");
+    resultCard.hidden = true;
     gradeResult.hidden = true;
     gradeResult.replaceChildren();
     studentAnswer.value = "";
     generateProblemButton.disabled = true;
+    generateProblemButton.textContent = "生成中...";
 
     window.setTimeout(() => {
       let nextQuestion = buildGeneratedQuestion();
@@ -507,8 +661,8 @@
       }
 
       renderQuestion(currentQuestion);
-      gradeForm.hidden = false;
       generateProblemButton.disabled = false;
+      generateProblemButton.textContent = "随机出题";
     }, 120);
   });
 
@@ -517,22 +671,25 @@
     const userAnswer = studentAnswer.value.trim();
 
     if (!currentQuestion) {
-      gradeResult.hidden = false;
-      gradeResult.className = "grade-result-card is-wrong";
-      gradeResult.textContent = "请先点击“AI出题”生成题目。";
+      renderGradeMessage("请先点击随机出题生成题目。");
       return;
     }
 
     if (!userAnswer) {
-      gradeResult.hidden = false;
-      gradeResult.className = "grade-result-card is-wrong";
-      gradeResult.textContent = "请先填写你的答案。";
+      renderGradeMessage("请先填写你的答案。");
       return;
     }
 
     const correct = isAnswerCorrect(userAnswer, currentQuestion);
     renderGradeResult(currentQuestion, userAnswer, correct);
+    incrementStats(correct);
     recordMistake(currentQuestion.question, userAnswer, correct);
+  });
+
+  resetStatsButton.addEventListener("click", () => {
+    if (window.confirm("确定要清空当前模型的答题统计吗？")) {
+      resetStats();
+    }
   });
 
   askForm.addEventListener("submit", async (event) => {
@@ -557,5 +714,6 @@
 
   buildSliders();
   renderAll();
+  updateStatsPanel();
   updateMistakeCount();
 })();
